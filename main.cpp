@@ -5,8 +5,10 @@
 #include <cassert>
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#include"dxcapi.h"
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "dxcompiler.lib")
 
 //クライアント領域のサイズ
 const int32_t kClientWidth = 1280;
@@ -60,6 +62,66 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	}
 	return DefWindowProc(hWnd, msg, wparam, lparam);
 }
+
+
+//CompileShader
+IDxcBlob* CompileShader(
+	const std::wstring& filePath,
+	const wchar_t* profile,
+	IDxcUtils* dxcUtils,
+	IDxcCompiler3* dxcCompiler,
+	IDxcIncludeHandler* includeHandler)
+{
+	//hlslファイルを読み込む
+	Log(ConvertString(std::format(L"Begin CompileShader, path:{}, prefile:{}\n", filePath, profile)));
+	IDxcBlobEncoding* shaderSource = nullptr;
+	HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
+	assert(SUCCEEDED(hr));
+	DxcBuffer shaderSourceBuffer;
+	shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
+	shaderSourceBuffer.Size = shaderSource->GetBufferSize();
+	shaderSourceBuffer.Encoding = DXC_CP_UTF8;
+
+	//コンパイルオプション
+	LPCWSTR arguments[] = {
+		filePath.c_str(),
+		L"-E", L"main",
+		L"-T", profile,
+		L"-Zi", //デバッグ情報を出力
+		L"-Qembed_debug", //デバッグ情報を埋め込む
+		L"-Od", //最適化なし
+		L"-Zpr", //行数情報を出力
+	};
+
+	//コンパイル
+	IDxcResult* shaderResult = nullptr;
+	hr = dxcCompiler->Compile(
+		&shaderSourceBuffer, 
+		arguments, _countof(arguments), 
+		includeHandler, 
+		IID_PPV_ARGS(&shaderResult));
+	assert(SUCCEEDED(hr));
+
+	//エラーメッセージを取得
+	IDxcBlobUtf8* shaderError = nullptr;
+	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
+	if (shaderError != nullptr && shaderError->GetStringLength() != 0)
+	{
+		Log(shaderError->GetStringPointer());
+		assert(false);
+	}
+
+	//コンパイル結果を取得
+	IDxcBlob* shaderBlob = nullptr;
+	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
+	assert(SUCCEEDED(hr));
+	Log(ConvertString(std::format(L"Compile Succeeded, path:{}, prefile:{}\n", filePath, profile)));
+	shaderSource->Release();
+	shaderResult->Release();
+	return shaderBlob;
+
+}
+
 //-----------------------------------------FUNCTION-----------------------------------------//
 
 
@@ -230,6 +292,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 	hr = commandList->Reset(commandAllocator, nullptr);
+	assert(SUCCEEDED(hr));
+
+	//-----------DXC-----------//
+	IDxcUtils* dxcUtils = nullptr;
+	IDxcCompiler3* dxcCompiler = nullptr;
+	hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+	assert(SUCCEEDED(hr));
+	hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+	assert(SUCCEEDED(hr));
+
+	IDxcIncludeHandler* includeHandler = nullptr;
+	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
 
