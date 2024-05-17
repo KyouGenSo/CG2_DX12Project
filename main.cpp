@@ -13,6 +13,11 @@
 #pragma comment(lib, "dxcompiler.lib")
 #pragma comment(lib, "dxguid.lib")
 
+#include"externals/imgui/imgui.h"
+#include"externals/imgui/imgui_impl_win32.h"
+#include"externals/imgui/imgui_impl_dx12.h"
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 #include"Vector4.h"
 #include"Matrix4x4.h"
 #include"Matrix4x4Function.h"
@@ -56,22 +61,6 @@ std::string ConvertString(const std::wstring& str) {
 	WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast<int>(str.size()), result.data(), sizeNeeded, NULL, NULL);
 	return result;
 }
-
-//ウィンドウプロシージャ
-LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM lparam)
-{
-	//メッセージによって処理を分岐
-	switch (msg)
-	{
-		//ウィンドウが破棄されたとき
-	case WM_DESTROY:
-		//メッセージループを終了
-		PostQuitMessage(0);
-		break;
-	}
-	return DefWindowProc(hWnd, msg, wparam, lparam);
-}
-
 
 //CompileShader
 IDxcBlob* CompileShader(
@@ -161,13 +150,50 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
 	return bufferResource;
 }
 
+ID3D12DescriptorHeap* CreateDescriptorHeap(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible)
+{
+	// ヒープの設定
+	D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
+	heapDesc.NumDescriptors = numDescriptors;
+	heapDesc.Type = heapType;
+	heapDesc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+	// ヒープの生成
+	ID3D12DescriptorHeap* descriptorHeap = nullptr;
+	HRESULT hr = device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&descriptorHeap));
+	assert(SUCCEEDED(hr));
+	return descriptorHeap;
+}
+
 //-----------------------------------------FUNCTION-----------------------------------------//
+
+
+//------------------------------------------WINDOW------------------------------------------//
+//ウィンドウプロシージャ
+LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+	if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wparam, lparam))
+	{
+		return true;
+	}
+	//メッセージによって処理を分岐
+	switch (msg)
+	{
+		//ウィンドウが破棄されたとき
+	case WM_DESTROY:
+		//メッセージループを終了
+		PostQuitMessage(0);
+		break;
+	}
+	return DefWindowProc(hWnd, msg, wparam, lparam);
+}
+
 
 
 //Windowsプログラムのエントリーポイント
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
-	//-----------------------------------------WINDOW-----------------------------------------//
+
 	WNDCLASS wc{};
 	//ウィンドウプロシージャ
 	wc.lpfnWndProc = WndProc;
@@ -213,6 +239,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 #endif
 	//-----------------------------------------DebugLayer-----------------------------------------//
+
 
 	//-----------------------------------------DirectX-----------------------------------------//
 	//DXGIファクトリの生成
@@ -325,12 +352,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	assert(SUCCEEDED(hr));
 
 	// DescriptorHeapの生成
-	ID3D12DescriptorHeap* rtvDescriptorHeap = nullptr;
-	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{};
-	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV; // レンダーターゲットビュー用
-	rtvHeapDesc.NumDescriptors = 2; // バッファ数分
-	hr = device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvDescriptorHeap));
-	assert(SUCCEEDED(hr));
+	ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
+	ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
+	//D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{};
+	//rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV; // レンダーターゲットビュー用
+	//rtvHeapDesc.NumDescriptors = 2; // バッファ数分
+	//hr = device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&rtvDescriptorHeap));
+	//assert(SUCCEEDED(hr));
 
 	// SwapChainからResourceを取得
 	ID3D12Resource* swapChainResources[2] = { nullptr };
@@ -362,7 +390,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	HANDLE fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	assert(fenceEvent != nullptr);
 
-	//-----------------------------------------DirectX-----------------------------------------//
 
 	//-----------------------------------------DXC初期化-----------------------------------------//
 	IDxcUtils* dxcUtils = nullptr;
@@ -500,7 +527,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	Matrix4x4* TrasformationMatrixData = nullptr;
 	// WVP行列を作成
 	Transform transform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
-	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 10.0f} };
+	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 5.0f} };
 	Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 	Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 	Matrix4x4 viewMatrix = Inverse(cameraMatrix);
@@ -529,7 +556,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	scissorRect.top = 0;
 	scissorRect.bottom = kClientHeight;
 
-	//-----------------------------------------GAMELOOP-----------------------------------------//
+	//-----------------------------------------DirectX-----------------------------------------//
+
+
+	//-----------------------------------------Imgui-----------------------------------------//
+
+	//ImGuiの初期化
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGui::StyleColorsDark();
+	ImGui_ImplWin32_Init(hWnd);
+	ImGui_ImplDX12_Init(
+		device,
+		swapChainDesc.BufferCount,
+		rtvDesc.Format,
+		srvDescriptorHeap,
+		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	//-----------------------------------------Imgui-----------------------------------------//
+
+
+
+	//---------------------------------------------------GAMELOOP-----------------------------------------------------//
 	MSG msg{};
 
 	while (msg.message != WM_QUIT)
@@ -542,6 +590,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 		} else {
 			//ここに更新処理を書く
+
+			//-------------imguiの初期化-------------//
+			ImGui_ImplDX12_NewFrame();
+			ImGui_ImplWin32_NewFrame();
+			ImGui::NewFrame();
+			//-------------imguiの初期化-------------//
 
 			//-----------画面の色を変える-----------//
 			// バックバッファのインデックスを取得
@@ -570,6 +624,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			// 画面をクリア
 			commandList->ClearRenderTargetView(rtvHandle[backBufferIndex], clearColor, 0, nullptr);
 
+			// imgui描画用のDescriptorHeapを設定。ClearRenderTargetViewの後、実際の描画する前に設定する
+			ID3D12DescriptorHeap* heaps[] = { srvDescriptorHeap };
+			commandList->SetDescriptorHeaps(_countof(heaps), heaps);
+
+			//-------------------ImGui-------------------//
+			ImGui::Begin("Transform");
+			ImGui::SliderFloat3("Scale", &transform.scale.x, 0.0f, 2.0f);
+			ImGui::SliderFloat3("Rotate", &transform.rotate.x, 0.0f, 6.28f);
+			ImGui::SliderFloat3("Translate", &transform.translate.x, -2.0f, 2.0f);
+			ImGui::End();
+
+			ImGui::Begin("Camera");
+			ImGui::SliderFloat3("Scale", &cameraTransform.scale.x, 0.0f, 2.0f);
+			ImGui::SliderFloat3("Rotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
+			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, 0.0f, 30.0f);
+			ImGui::End();
+
+			//-------------------ImGui-------------------//
+
+			// ImGuiの内部コマンドを生成。描画処理の前に行う
+			ImGui::Render();
+
 			//-----------三角形の描画-----------//
 			// 描画先のRTVを設定する
 			commandList->OMSetRenderTargets(1, &rtvHandle[backBufferIndex], false, nullptr);
@@ -589,14 +665,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			// WVPのcBufferの設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
 
+			// 三角形の座標変換
 			transform.rotate.y += 0.03f;
 			worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			viewMatrix = Inverse(cameraMatrix);
+			projectionMatrix = MakePerspectiveMatrix(0.45f, static_cast<float>(kClientWidth) / static_cast<float>(kClientHeight), 0.1f, 100.0f);
 			wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			*TrasformationMatrixData = wvpMatrix;
 
 			// 描画
 			commandList->DrawInstanced(3, 1, 0, 0);
 			//-----------三角形の描画-----------//
+
+
+			// commandListにimguiの描画コマンドを積む。描画処理の後、RTVからPRESENT Stateに戻す前に行う
+			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+
 
 			// ---RTVからPRESENTStateに戻すTransitionBarrierを張る--- //
 			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -632,7 +717,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			assert(SUCCEEDED(hr));
 			//-----------画面の色を変える-----------//
 
-
 			//ここに描画処理を書く
 
 
@@ -640,10 +724,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		}
 	}
 
-	//-----------------------------------------GAMELOOP-----------------------------------------/
+	//-------------------------------------------------GAMELOOP-----------------------------------------------------/
+	
 	// 解放
-	includeHandler->Release();
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+
 	wvpResource->Release();
+	includeHandler->Release();
 	materialResource->Release();
 	vertexResource->Release();
 	graphicsPipelineState->Release();
