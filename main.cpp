@@ -602,7 +602,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//--------------------------Resource--------------------------//
 
 	// 頂点バッファのリソースを作る。頂点三つ分のサイズ----------------------------------------------//
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
 
 	//VertexBufferView
 	// 頂点バッファビューを作成する
@@ -610,7 +610,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// リソースの先頭アドレスから使う
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 	// 使用するリソースのサイズは頂点三つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 3;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
 	// 一つの頂点のサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
@@ -627,6 +627,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 右下
 	vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
 	vertexData[2].texcoord = { 1.0f, 1.0f };
+
+	// 二つ目の三角形
+	 vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f }; // 左下
+	 vertexData[3].texcoord = { 0.0f, 1.0f };
+
+	 vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 上
+	 vertexData[4].texcoord = { 0.5f, 0.0f };
+
+	 vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f }; // 右下
+	 vertexData[5].texcoord = { 1.0f, 1.0f };
+
 
 
 
