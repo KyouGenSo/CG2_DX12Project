@@ -13,8 +13,7 @@ struct PixelShaderOutput
 struct BloomThreshold
 {
     float32_t threshold;
-    float32_t texelSizeX;
-    float32_t texelSizeY;
+    float32_t2 texelSize;
 };
 
 ConstantBuffer<Material> gMaterial : register(b0);
@@ -51,15 +50,15 @@ float4 GaussianBlur(float2 texcoord, float2 texSize)
     for (int i = 1; i < 5; i++)
     {
         float2 weightOffset = float2(texOffset.x * i, 0.0f);
-        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.texelSizeX).xyz * weight[i];
-        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.texelSizeX).xyz * weight[i];
+        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.texelSize.x).xyz * weight[i];
+        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.texelSize.x).xyz * weight[i];
     }
     
     for (int j = 1; j < 5; j++)
     {
         float2 weightOffset = float2(0.0f, texOffset.y * j);
-        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.texelSizeY).xyz * weight[j];
-        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.texelSizeY).xyz * weight[j];
+        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.texelSize.y).xyz * weight[j];
+        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.texelSize.y).xyz * weight[j];
     }
     
     return float4(result, 1.0f);
@@ -72,6 +71,7 @@ float4 BloomCombine(float2 texcoord, float2 texSize)
     
     float4 baseColor = AdjustSaturation(gTexture.Sample(gSampler, texcoord), 1.0f);
     float4 blurColor = AdjustSaturation(GaussianBlur(texcoord, texSize), 0.6f);
+    
     
     return baseColor + blurColor;
 }

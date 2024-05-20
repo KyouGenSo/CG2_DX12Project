@@ -40,8 +40,7 @@ struct VertexData
 struct BloomThreshold
 {
 	float threshold;
-	float texelSizeX;
-	float texelSizeY;
+	Vector2 texelSize;
 };
 
 //-----------------------------------------FUNCTION-----------------------------------------//
@@ -609,9 +608,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	//-----------------------------------------PSO-----------------------------------------///
 
-	//--------------------------Resource--------------------------//
 
-	// 頂点バッファのリソースを作る。頂点三つ分のサイズ----------------------------------------------//
+
+	//----------------------------------------Resource---------------------------------------//
+
+	// 頂点バッファのリソースを作る。頂点三つ分のサイズ------------------------------------//
 	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
 
 	//VertexBufferView
@@ -648,6 +649,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 色
 	materialData[0] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
+
 	// WVP用のCBufferリソースを作る。Matrix4x4分のサイズ----------------------------------------------//
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
 	// WVPにデータを書き込む
@@ -680,8 +682,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	BloomThresholdResource->Map(0, nullptr, reinterpret_cast<void**>(&bloomThresholdData));
 	// データを書き込む
 	bloomThresholdData->threshold = 1.0f;
-	bloomThresholdData->texelSizeX = 1.0f;
-	bloomThresholdData->texelSizeY = 1.0f;
+	bloomThresholdData->texelSize.x = 1.0f;
+	bloomThresholdData->texelSize.y = 1.0f;
 
 	// Texture用のSRVを作成
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -853,8 +855,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 			ImGui::Begin("BloomParameter");
 			ImGui::SliderFloat("BloomThreshold", &bloomThresholdData->threshold, 0.0f, 1.0f);
-			ImGui::SliderFloat("TexelSizeX", &bloomThresholdData->texelSizeX, 0.0f, 100.0f);
-			ImGui::SliderFloat("TexelSizeY", &bloomThresholdData->texelSizeY, 0.0f, 100.0f);
+			ImGui::SliderFloat("TexelSizeX", &bloomThresholdData->texelSize.x, 0.0f, 100.0f);
+			ImGui::SliderFloat("TexelSizeY", &bloomThresholdData->texelSize.y, 0.0f, 100.0f);
 			ImGui::End();
 
 			//-------------------ImGui-------------------//
