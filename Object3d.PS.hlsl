@@ -72,7 +72,6 @@ float4 BloomCombine(float2 texcoord, float2 texSize)
     float4 baseColor = AdjustSaturation(gTexture.Sample(gSampler, texcoord), 1.0f);
     float4 blurColor = AdjustSaturation(GaussianBlur(texcoord, texSize), 0.6f);
     
-    
     return baseColor + blurColor;
 }
 
@@ -86,7 +85,6 @@ PixelShaderOutput main(VertexShaderOutput input) : SV_TARGET0
     
     output.color = BloomCombine(input.texcoord, texSize);
    
-    
     
     return output;
 }

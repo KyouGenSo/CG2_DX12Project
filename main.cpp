@@ -734,7 +734,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// Sprite用のTrasformationMatrixCBufferリソースを作成---------------------------------------------------------------//
 	ID3D12Resource* TrasformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
-	// Wデータを書き込む
+	// データを書き込む
 	Matrix4x4* TrasformationMatrixDataSprite = nullptr;
 	// Map
 	TrasformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&TrasformationMatrixDataSprite));
@@ -752,7 +752,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	Matrix4x4 wvpMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 
 	*TrasformationMatrixDataSprite = wvpMatrixSprite;
-
 
 	//--------------------------Resource--------------------------//
 
