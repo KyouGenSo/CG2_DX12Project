@@ -37,6 +37,13 @@ struct VertexData
 	Vector2 texcoord;
 };
 
+struct BloomThreshold
+{
+	float threshold;
+	float texelSizeX;
+	float texelSizeY;
+};
+
 //-----------------------------------------FUNCTION-----------------------------------------//
 void Log(const std::string& messege)
 {
@@ -318,7 +325,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		debugController->EnableDebugLayer();
 		debugController->SetEnableGPUBasedValidation(TRUE);
 	}
-
 #endif
 	//-----------------------------------------DebugLayer-----------------------------------------//
 
@@ -512,7 +518,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動計算
 
 	// RootParameterの設定。複数設定できるので配列
-	D3D12_ROOT_PARAMETER rootParameters[3] = {};
+	D3D12_ROOT_PARAMETER rootParameters[4] = {};
 
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビューを使う
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
@@ -526,6 +532,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
 	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; // ディスクリプタレンジを設定
 	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); // レンジの数
+
+	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビューを使う
+	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
+	rootParameters[3].Descriptor.ShaderRegister = 1; // レジスタ番号とバインド
 
 	descriptionRootSignature.pParameters = rootParameters;
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
@@ -629,16 +639,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	vertexData[2].texcoord = { 1.0f, 1.0f };
 
 
-
 	// マテリアル用のリソースを作る。今回はcolor1つ分のサイズ--------------------------------------//
 	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
 	// マテリアルにデータを書き込む
 	Vector4* materialData = nullptr;
 	// アドレスを取得
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
-	// 赤
+	// 色
 	materialData[0] = { 1.0f, 1.0f, 1.0f, 1.0f };
-
 
 	// WVP用のCBufferリソースを作る。Matrix4x4分のサイズ----------------------------------------------//
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
@@ -659,10 +667,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 	// Textureを読んで転送する---------------------------------------------------------------//
-	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
+	DirectX::ScratchImage mipImages = LoadTexture("resources/blloomTest1.png");
 	const DirectX::TexMetadata& metaData = mipImages.GetMetadata();
 	ID3D12Resource* textureResource = CreateTextureResource(device, metaData);
 	UploadTextureData(textureResource, mipImages);
+
+	// Texture用のBloomThresholdCBufferリソースを作成
+	ID3D12Resource* BloomThresholdResource = CreateBufferResource(device, sizeof(BloomThreshold));
+	// BloomThresholdにデータを書き込む
+	BloomThreshold* bloomThresholdData = nullptr;
+	// アドレスを取得
+	BloomThresholdResource->Map(0, nullptr, reinterpret_cast<void**>(&bloomThresholdData));
+	// データを書き込む
+	bloomThresholdData->threshold = 1.0f;
+	bloomThresholdData->texelSizeX = 1.0f;
+	bloomThresholdData->texelSizeY = 1.0f;
 
 	// Texture用のSRVを作成
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -680,6 +699,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// SRVを作成
 	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
+
 	// Sprite用の頂点リソースを作成---------------------------------------------------------------//
 	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
 
@@ -695,19 +715,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
 
 	// 一つ目の三角形
-	vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f }; // 左下
+	vertexDataSprite[0].position = { 0.0f, 640.0f, 0.0f, 1.0f }; // 左下
 	vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
 	vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 左上
 	vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
-	vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f }; // 右下
+	vertexDataSprite[2].position = { 420.0f, 640.0f, 0.0f, 1.0f }; // 右下
 	vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
 
 	// 二つ目の三角形
 	vertexDataSprite[3].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 左上
 	vertexDataSprite[3].texcoord = { 0.0f, 0.0f };
-	vertexDataSprite[4].position = { 640.0f, 0.0f, 0.0f, 1.0f }; // 右上
+	vertexDataSprite[4].position = { 420.0f, 0.0f, 0.0f, 1.0f }; // 右上
 	vertexDataSprite[4].texcoord = { 1.0f, 0.0f };
-	vertexDataSprite[5].position = { 640.0f, 360.0f, 0.0f, 1.0f }; // 右下
+	vertexDataSprite[5].position = { 420.0f, 640.0f, 0.0f, 1.0f }; // 右下
 	vertexDataSprite[5].texcoord = { 1.0f, 1.0f };
 
 	// Sprite用のTrasformationMatrixCBufferリソースを作成---------------------------------------------------------------//
@@ -720,6 +740,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	*TrasformationMatrixDataSprite = MakeIdentityMatrix4x4();
 
 	Transform transformSprite{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
+	transformSprite.translate.x = 400.0f;
+	transformSprite.translate.y = 40.0f;
 
 	// Sprite用のwvpMatrix
 	Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -821,16 +843,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetDescriptorHeaps(_countof(heaps), heaps);
 
 			//-------------------ImGui-------------------//
-			ImGui::Begin("Transform");
-			ImGui::SliderFloat3("Scale", &transform.scale.x, 0.0f, 2.0f);
-			ImGui::SliderFloat3("Rotate", &transform.rotate.x, 0.0f, 6.28f);
-			ImGui::SliderFloat3("Translate", &transform.translate.x, -2.0f, 2.0f);
+			ImGui::Begin("SpriteCameraTransform");
+			ImGui::SliderFloat3("SpriteScale", &transformSprite.scale.x, 0.0f, 2.0f);
+			ImGui::SliderFloat3("SpriteTranslate", &transformSprite.translate.x, 0.0f, 1280.0f);
+			ImGui::SliderFloat3("CameraScale", &cameraTransform.scale.x, 0.0f, 2.0f);
+			ImGui::SliderFloat3("CameraRotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
+			ImGui::SliderFloat3("CameraTranslate", &cameraTransform.translate.x, 0.0f, 30.0f);
 			ImGui::End();
 
-			ImGui::Begin("Camera");
-			ImGui::SliderFloat3("Scale", &cameraTransform.scale.x, 0.0f, 2.0f);
-			ImGui::SliderFloat3("Rotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
-			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, 0.0f, 30.0f);
+			ImGui::Begin("BloomParameter");
+			ImGui::SliderFloat("BloomThreshold", &bloomThresholdData->threshold, 0.0f, 1.0f);
+			ImGui::SliderFloat("TexelSizeX", &bloomThresholdData->texelSizeX, 0.0f, 100.0f);
+			ImGui::SliderFloat("TexelSizeY", &bloomThresholdData->texelSizeY, 0.0f, 100.0f);
 			ImGui::End();
 
 			//-------------------ImGui-------------------//
@@ -869,13 +893,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			// Textureの設定
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
+			// BloomThresholdの設定
+			commandList->SetGraphicsRootConstantBufferView(3, BloomThresholdResource->GetGPUVirtualAddress());
+
 			// 描画
-			commandList->DrawInstanced(3, 1, 0, 0);
+			//commandList->DrawInstanced(3, 1, 0, 0);
 			//-----------三角形の描画-----------//
 
 
 
 			//-----------Spriteの描画-----------//
+			// spriteの座標変換
+			worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
+			wvpMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
+
+			*TrasformationMatrixDataSprite = wvpMatrixSprite;
+
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->SetGraphicsRootConstantBufferView(1, TrasformationMatrixResourceSprite->GetGPUVirtualAddress());
 			commandList->DrawInstanced(6, 1, 0, 0);
@@ -936,7 +969,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
+	// リソースの解放
 	wvpResource->Release();
+	materialResource->Release();
+	vertexResource->Release();
+	textureResource->Release();
+	BloomThresholdResource->Release();
+	TrasformationMatrixResourceSprite->Release();
+	vertexResourceSprite->Release();
+	TrasformationMatrixResourceSprite->Release();
+	dxcUtils->Release();
+	dxcCompiler->Release();
 	includeHandler->Release();
 	materialResource->Release();
 	vertexResource->Release();
