@@ -13,7 +13,7 @@ struct PixelShaderOutput
 struct BloomThreshold
 {
     float32_t threshold;
-    float32_t2 texelSize;
+    float32_t2 blurSize;
 };
 
 ConstantBuffer<Material> gMaterial : register(b0);
@@ -35,10 +35,13 @@ float4 AdjustSaturation(float4 color, float saturation)
 
 float4 GaussianBlur(float2 texcoord, float2 texSize)
 {
+    // 1ピクセルの長さ
     const float2 texOffset = 1.0f / texSize;
     
+    // Gaussian Kernel
     const float weight[5] = { 0.227027f, 0.19459465f, 0.1216216f, 0.054054f, 0.016216f };
     
+    // 画像の明るい部分を抽出
     float4 bColor = BloomExtract(texcoord);
     
     float3 result;
@@ -46,19 +49,20 @@ float4 GaussianBlur(float2 texcoord, float2 texSize)
     result.y = bColor.y * weight[0];
     result.z = bColor.z * weight[0];
     
-    
+    // 画像の明るい部分を横方向にぼかす
     for (int i = 1; i < 5; i++)
     {
         float2 weightOffset = float2(texOffset.x * i, 0.0f);
-        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.texelSize.x).xyz * weight[i];
-        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.texelSize.x).xyz * weight[i];
+        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.blurSize).xyz * weight[i];
+        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.blurSize).xyz * weight[i];
     }
-    
+   
+    // 画像の明るい部分を縦方向にぼかす
     for (int j = 1; j < 5; j++)
     {
         float2 weightOffset = float2(0.0f, texOffset.y * j);
-        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.texelSize.y).xyz * weight[j];
-        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.texelSize.y).xyz * weight[j];
+        result += BloomExtract(texcoord + weightOffset * gBloomThreshold.blurSize).xyz * weight[j];
+        result += BloomExtract(texcoord - weightOffset * gBloomThreshold.blurSize).xyz * weight[j];
     }
     
     return float4(result, 1.0f);
@@ -84,6 +88,8 @@ PixelShaderOutput main(VertexShaderOutput input) : SV_TARGET0
     gTexture.GetDimensions(texSize.x, texSize.y);
     
     output.color = BloomCombine(input.texcoord, texSize);
+    
+    //output.color = BloomExtract(input.texcoord);
    
     
     return output;

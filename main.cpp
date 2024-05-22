@@ -854,8 +854,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 			ImGui::Begin("BloomParameter");
 			ImGui::SliderFloat("BloomThreshold", &bloomThresholdData->threshold, 0.0f, 1.0f);
-			ImGui::SliderFloat("TexelSizeX", &bloomThresholdData->texelSize.x, 0.0f, 100.0f);
-			ImGui::SliderFloat("TexelSizeY", &bloomThresholdData->texelSize.y, 0.0f, 100.0f);
+			ImGui::SliderFloat("BlurSizeX", &bloomThresholdData->texelSize.x, 0.0f, 100.0f);
+			ImGui::SliderFloat("BlurSizeY", &bloomThresholdData->texelSize.y, 0.0f, 100.0f);
 			ImGui::End();
 
 			//-------------------ImGui-------------------//
