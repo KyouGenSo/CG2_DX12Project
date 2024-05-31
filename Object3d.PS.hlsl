@@ -13,6 +13,7 @@ struct PixelShaderOutput
 struct BloomThreshold
 {
     float32_t threshold;
+    
     float32_t2 blurSize;
 };
 
