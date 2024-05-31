@@ -500,17 +500,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	rtvHandle[1].ptr = rtvHandle[0].ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	device->CreateRenderTargetView(swapChainResources[1], &rtvDesc, rtvHandle[1]);
 
-	// DepthStencilResourceの作成
-	ID3D12Resource* depthStencilResource = CeateDepthStencilResource(device, kClientWidth, kClientHeight);
-
-	// DSVの作成、descriptorの数は1、shader内で触るものではないのでShaderVisibleはfalse
-	ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
-
-	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-	device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-
 	//FenceとEventの生成
 	ID3D12Fence* fence = nullptr;
 	uint64_t fenceValue = 0;
@@ -727,7 +716,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 単位行列を書き込んでいく
 	*TrasformationMatrixData = wvpMatrix;
 
-
 	// Textureを読んで転送する---------------------------------------------------------------//
 	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
 	const DirectX::TexMetadata& metaData = mipImages.GetMetadata();
@@ -735,25 +723,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	ID3D12Resource* textureResource = CreateTextureResource(device, metaData);
 	// Textureのデータを転送
 	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
-
-	// CommandListをcloseして, CommandQueue->ExecuteCommandListsでキックする
-	commandList->Close();
-	commandQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList* const*>(&commandList));
-
-	// Fenceを使ってGPUの処理が終わるのを待つ
-	commandQueue->Signal(fence, ++fenceValue);
-	if (fence->GetCompletedValue() < fenceValue)
-	{
-		fence->SetEventOnCompletion(fenceValue, fenceEvent);
-		WaitForSingleObject(fenceEvent, INFINITE);
-	}
-
-	// CommandListをリセット
-	commandAllocator->Reset();
-	commandList->Reset(commandAllocator, nullptr);
-
-	// intemediateResourceをrelease
-	intermediateResource->Release();
 
 	// Texture用のSRVを作成
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -820,6 +789,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	*TrasformationMatrixDataSprite = wvpMatrixSprite;
 
+	// DepthStencilResourceの作成
+	ID3D12Resource* depthStencilResource = CeateDepthStencilResource(device, kClientWidth, kClientHeight);
+
+	// DSVの作成、descriptorの数は1、shader内で触るものではないのでShaderVisibleはfalse
+	ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
+
+	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
 	//--------------------------Resource--------------------------//
 
 	// viewPortの設定
@@ -879,7 +859,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			ImGui::NewFrame();
 			//-------------imguiの初期化-------------//
 
-			//-----------画面の色を変える-----------//
+
+			// 三角形の座標変換
+			transform.rotate.y -= 0.03f;
+			worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			viewMatrix = Inverse(cameraMatrix);
+			projectionMatrix = MakePerspectiveMatrix(0.45f, static_cast<float>(kClientWidth) / static_cast<float>(kClientHeight), 0.1f, 100.0f);
+			wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+			*TrasformationMatrixData = wvpMatrix;
+
 			// バックバッファのインデックスを取得
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
@@ -897,6 +886,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->ResourceBarrier(1, &barrier);
 			// ---PRESENTからRTV用のStateにするTransitionBarrierを張る--- //
 
+			// imgui描画用のDescriptorHeapを設定。ClearRenderTargetViewの後、実際の描画する前に設定する
+			ID3D12DescriptorHeap* heaps[] = { srvDescriptorHeap };
+			commandList->SetDescriptorHeaps(_countof(heaps), heaps);
+
 			// DepthStencilのクリア
 			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 			commandList->OMSetRenderTargets(1, &rtvHandle[backBufferIndex], false, &dsvHandle);
@@ -905,12 +898,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
 			// 画面をクリア
-			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 			commandList->ClearRenderTargetView(rtvHandle[backBufferIndex], clearColor, 0, nullptr);
+			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-			// imgui描画用のDescriptorHeapを設定。ClearRenderTargetViewの後、実際の描画する前に設定する
-			ID3D12DescriptorHeap* heaps[] = { srvDescriptorHeap };
-			commandList->SetDescriptorHeaps(_countof(heaps), heaps);
+			commandList->RSSetViewports(1, &viewPort);
+			commandList->RSSetScissorRects(1, &scissorRect);
 
 			//-------------------ImGui-------------------//
 			ImGui::Begin("Transform");
@@ -924,16 +916,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			ImGui::SliderFloat3("Rotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
 			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, 0.0f, 30.0f);
 			ImGui::End();
-
 			//-------------------ImGui-------------------//
 
 			// ImGuiの内部コマンドを生成。描画処理の前に行う
 			ImGui::Render();
 
 			//-----------三角形の描画-----------//
-
-			commandList->RSSetViewports(1, &viewPort);
-			commandList->RSSetScissorRects(1, &scissorRect);
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPipelineState);
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
@@ -945,22 +933,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			// WVPのcBufferの設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
 
-			// 三角形の座標変換
-			transform.rotate.y -= 0.03f;
-			worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-			viewMatrix = Inverse(cameraMatrix);
-			projectionMatrix = MakePerspectiveMatrix(0.45f, static_cast<float>(kClientWidth) / static_cast<float>(kClientHeight), 0.1f, 100.0f);
-			wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-			*TrasformationMatrixData = wvpMatrix;
-
 			// Textureの設定
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			// 描画
 			commandList->DrawInstanced(6, 1, 0, 0);
 			//-----------三角形の描画-----------//
-
 
 
 			//-----------Spriteの描画-----------//
@@ -1006,7 +984,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			assert(SUCCEEDED(hr));
 			hr = commandList->Reset(commandAllocator, nullptr);
 			assert(SUCCEEDED(hr));
-			//-----------画面の色を変える-----------//
 
 			//ここに描画処理を書く
 
@@ -1022,6 +999,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
+	intermediateResource->Release();
 	wvpResource->Release();
 	includeHandler->Release();
 	materialResource->Release();
