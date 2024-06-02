@@ -232,7 +232,7 @@ Matrix4x4 MakePerspectiveMatrix(float fovY, float aspectRatio, float nearClip, f
 	result.m[2][0] = 0.0f;
 	result.m[2][1] = 0.0f;
 	result.m[2][2] = farClip / range;
-	result.m[2][3] = -1.0f;
+	result.m[2][3] = 1.0f;
 
 	result.m[3][0] = 0.0f;
 	result.m[3][1] = 0.0f;
