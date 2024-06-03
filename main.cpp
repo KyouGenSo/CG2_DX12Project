@@ -24,6 +24,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include"Matrix4x4.h"
 #include"Matrix4x4Function.h"
 #include"Vector3Function.h"
+#include"Easing.h"
 
 #include"externals/DirectXTex/DirectXTex.h"
 
@@ -38,6 +39,10 @@ struct VertexData
 	Vector2 texcoord;
 };
 
+struct TexVisibility
+{
+	float visible;
+};
 //-----------------------------------------FUNCTION-----------------------------------------//
 void Log(const std::string& messege);
 
@@ -329,16 +334,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	descriptionRootSignature.NumStaticSamplers = _countof(samplerDesc);
 
 	// DescriptorRangeの設定。
-	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-	descriptorRange[0].BaseShaderRegister = 0; // レジスタ番号
-	descriptorRange[0].NumDescriptors = 1; // ディスクリプタ数
-	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使う
-	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動計算
+	D3D12_DESCRIPTOR_RANGE descriptorRange1[1] = {};
+	descriptorRange1[0].BaseShaderRegister = 0; // レジスタ番号
+	descriptorRange1[0].NumDescriptors = 1; // ディスクリプタ数
+	descriptorRange1[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV; // SRVを使う
+	descriptorRange1[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND; // Offsetを自動計算
 
 	// RootParameterの設定。複数設定できるので配列
-	D3D12_ROOT_PARAMETER rootParameters[3] = {};
+	D3D12_ROOT_PARAMETER rootParameters[4] = {};
 
-	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビューを使う
+	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
 	rootParameters[0].Descriptor.ShaderRegister = 0; // レジスタ番号とバインド
 
@@ -348,8 +353,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; // ディスクリプタテーブルを使う
 	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
-	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; // ディスクリプタレンジを設定
-	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); // レンジの数
+	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange1; // ディスクリプタレンジを設定
+	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange1); // レンジの数
+
+	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビューを使う
+	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // 頂点シェーダーで使う
+	rootParameters[3].Descriptor.ShaderRegister = 1; // レジスタ番号とバインド
 
 	descriptionRootSignature.pParameters = rootParameters;
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
@@ -391,7 +400,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 三角形の中を塗りつぶす
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 	// 裏面を表示しない
-	rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
+	rasterizerDesc.CullMode = D3D12_CULL_MODE_NONE;
 
 	// shaderのコンパイル
 	IDxcBlob* vertexShaderBlob = CompileShader(L"Object3d.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
@@ -439,7 +448,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//-------------------------------------Resource------------------------------------------//
 
 	// 頂点バッファのリソースを作る。頂点三つ分のサイズ----------------------------------------------//
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
 
 	//VertexBufferView
 	// 頂点バッファビューを作成する
@@ -447,7 +456,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// リソースの先頭アドレスから使う
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 	// 使用するリソースのサイズは頂点三つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 3;
 	// 一つの頂点のサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
@@ -456,24 +465,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// アドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 	// 左下
-	vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
+	vertexData[0].position = { -0.25f, -0.5f, 0.0f, 1.0f };
 	vertexData[0].texcoord = { 0.0f, 1.0f };
 	// 上
-	vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
+	vertexData[1].position = { 0.0f, 0.0f, 0.0f, 1.0f };
 	vertexData[1].texcoord = { 0.5f, 0.0f };
 	// 右下
-	vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
+	vertexData[2].position = { 0.25f, -0.5f, 0.0f, 1.0f };
 	vertexData[2].texcoord = { 1.0f, 1.0f };
 
 	// 二つ目の三角形
-	vertexData[3].position = { -0.5f, -0.5f, -0.5f, 1.0f }; // 左下
-	vertexData[3].texcoord = { 0.0f, 1.0f };
+	//vertexData[3].position = { -0.5f, -0.5f, -0.5f, 1.0f }; // 左下
+	//vertexData[3].texcoord = { 0.0f, 1.0f };
 
-	vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 上
-	vertexData[4].texcoord = { 0.5f, 0.0f };
+	//vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 上
+	//vertexData[4].texcoord = { 0.5f, 0.0f };
 
-	vertexData[5].position = { 0.5f, -0.5f, 0.5f, 1.0f }; // 右下
-	vertexData[5].texcoord = { 1.0f, 1.0f };
+	//vertexData[5].position = { 0.5f, -0.5f, 0.5f, 1.0f }; // 右下
+	//vertexData[5].texcoord = { 1.0f, 1.0f };
 
 
 	// マテリアル用のリソースを作る。今回はcolor1つ分のサイズ--------------------------------------//
@@ -485,10 +494,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 赤
 	materialData[0] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
+	ID3D12Resource* materialResource2 = CreateBufferResource(device, sizeof(Vector4));
+	Vector4* materialData2 = nullptr;
+	materialResource2->Map(0, nullptr, reinterpret_cast<void**>(&materialData2));
+	materialData2[0] = { 1.0f, 0.0f, 0.0f, 1.0f };
 
-	// WVP用のCBufferリソースを作る。Matrix4x4分のサイズ----------------------------------------------//
+	ID3D12Resource* materialResource3 = CreateBufferResource(device, sizeof(Vector4));
+	Vector4* materialData3 = nullptr;
+	materialResource3->Map(0, nullptr, reinterpret_cast<void**>(&materialData3));
+	materialData3[0] = { 0.0f, 1.0f, 0.0f, 1.0f };
+
+	// WVP行列用のCBufferリソースを作る。Matrix4x4分のサイズ----------------------------------------------//
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
-	// WVPにデータを書き込む
+	// WVP行列にデータを書き込む
 	Matrix4x4* TrasformationMatrixData = nullptr;
 	// アドレスを取得
 	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&TrasformationMatrixData));
@@ -496,7 +514,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	*TrasformationMatrixData = MakeIdentityMatrix4x4();
 
 	Transform transform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
-	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -5.0f} };
+
+	ID3D12Resource* wvpResource2 = CreateBufferResource(device, sizeof(Matrix4x4));
+	Matrix4x4* TrasformationMatrixData2 = nullptr;
+	wvpResource2->Map(0, nullptr, reinterpret_cast<void**>(&TrasformationMatrixData2));
+	*TrasformationMatrixData2 = MakeIdentityMatrix4x4();
+
+	Transform transform2{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
+
+	ID3D12Resource* wvpResource3 = CreateBufferResource(device, sizeof(Matrix4x4));
+	Matrix4x4* TrasformationMatrixData3 = nullptr;
+	wvpResource3->Map(0, nullptr, reinterpret_cast<void**>(&TrasformationMatrixData3));
+	*TrasformationMatrixData3 = MakeIdentityMatrix4x4();
+
+	Transform transform3{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
 
 	// Textureを読んで転送する---------------------------------------------------------------//
 	// 一枚目のTextureの読み込み
@@ -545,6 +576,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// Texture切り替え用変数
 	bool isMonsterBall = false;
+
+	// TextureVisibility用のCBRリソースを作成
+	ID3D12Resource* TexVsibilityCBR = CreateBufferResource(device, sizeof(TexVisibility));
+	TexVisibility* isTexVisible = nullptr;
+	TexVsibilityCBR->Map(0, nullptr, reinterpret_cast<void**>(&isTexVisible));
+	isTexVisible->visible = 0.0f;
+	bool isTextureVisible = false;
 
 	// Sprite用の頂点リソースを作成---------------------------------------------------------------//
 	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
@@ -644,6 +682,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//-----------------------------------------Imgui-----------------------------------------//
 
 
+	// 演出切替用の変数
+	bool isPlaying = false;
+	bool isPlayed = false;
+
+	// 座標変換用の行列初期化
+	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -5.0f} };
+	Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+	Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+	Matrix4x4 projectionMatrix = MakePerspectiveMatrix(0.45f, static_cast<float>(kClientWidth) / static_cast<float>(kClientHeight), 0.1f, 100.0f);
+
+	// 演出用の変数
+	float t = 0;
+	Vector3 tri1Pos = { 0.0f, 0.0f, 0.0f };
+	Vector3 tri2Pos = { 0.0f, 0.0f, 0.0f };
+	Vector3 tri3Pos = { 0.0f, 0.0f, 0.0f };
+
+	Vector3 tri1Rot = { 0.0f, 0.0f, 0.0f };
+	Vector3 tri2Rot = { 0.0f, 0.0f, 0.0f };
+	Vector3 tri3Rot = { 0.0f, 0.0f, 0.0f };
+
+	Vector3 tri1Color = { 1.0f, 1.0f, 1.0f };
+	Vector3 tri2Color = { 1.0f, 1.0f, 1.0f };
+	Vector3 tri3Color = { 1.0f, 1.0f, 1.0f };
+
+	Vector3 tri1OriginPos = { -14.3f, -7.7f, 30.0f };
+	Vector3 tri2OriginPos = { 14.3f, -7.7f, 30.0f };
+	Vector3 tri3OriginPos = { 0.0f, 8.0f, 30.0f };
 
 	//---------------------------------------------------GAMELOOP-----------------------------------------------------//
 	MSG msg{};
@@ -657,24 +722,171 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			DispatchMessage(&msg);
 
 		} else {
+
+			//ここに更新処理を書く-----------------------------------------------------------
+
+			if (isPlaying) {
+				// 演出のため初期化する
+				if (!isPlayed) {
+
+					tri1Pos = transform.translate;
+					tri2Pos = transform2.translate;
+					tri3Pos = transform3.translate;
+
+					tri1Rot = transform.rotate;
+					tri2Rot = transform2.rotate;
+					tri3Rot = transform3.rotate;
+
+					tri1Color = { materialData[0].x, materialData[0].y, materialData[0].z };
+					tri2Color = { materialData2[0].x, materialData2[0].y, materialData2[0].z };
+					tri3Color = { materialData3[0].x, materialData3[0].y, materialData3[0].z };
+
+					materialData[0] = { 1.0f, 0.95f, 0.0f, 1.0f };
+					materialData2[0] = { 1.0f, 0.95f, 0.0f, 1.0f };
+					materialData3[0] = { 1.0f, 0.95f, 0.0f, 1.0f };
+
+					transform.translate = tri1OriginPos;
+					transform2.translate = tri2OriginPos;
+					transform3.translate = tri3OriginPos;
+
+
+					transform.rotate.x = 0.0f;
+					transform.rotate.y = 0.0f;
+					transform.rotate.z = 0.0f;
+
+					transform2.rotate.x = 0.0f;
+					transform2.rotate.y = 0.0f;
+					transform2.rotate.z = 0.0f;
+
+					transform3.rotate.x = 0.0f;
+					transform3.rotate.y = 0.0f;
+					transform3.rotate.z = 0.0f;
+
+
+					isTextureVisible = false;
+					isMonsterBall = false;
+
+					isPlayed = true;
+				}
+
+				transform.translate.x = EaseInSine(t, tri1OriginPos.x, -0.25f);
+				transform.translate.y = EaseInSine(t, tri1OriginPos.y, 0.0f);
+				transform.translate.z = EaseInSine(t, 30.0f, 0.0f);
+				transform.rotate.x = EaseInSine(t, 0.0f, 6.28f);
+
+				transform2.translate.x = EaseInSine(t, tri2OriginPos.x, 0.25f);
+				transform2.translate.y = EaseInSine(t, tri2OriginPos.y, 0.0f);
+				transform2.translate.z = EaseInSine(t, 30.0f, 0.0f);
+				transform2.rotate.x = EaseInSine(t, 0.0f, 6.28f);
+
+				transform3.translate.x = EaseInSine(t, tri3OriginPos.x, 0.0f);
+				transform3.translate.y = EaseInSine(t, tri3OriginPos.y, 0.5f);
+				transform3.translate.z = EaseInSine(t, 30.0f, 0.0f);
+				transform3.rotate.x = EaseInSine(t, 0.0f, 6.28f);
+
+				if (t < 1.0f) {
+					t += 0.003f;
+				} else if (t >= 1.0f) {
+					t = 1.0f;
+				}
+
+				// 三角形の座標変換
+				Matrix4x4 worldMatrix3 = MakeAffineMatrix(transform3.scale, transform3.rotate, transform3.translate);
+				Matrix4x4 wvpMatrix3 = Multiply(worldMatrix3, Multiply(viewMatrix, projectionMatrix));
+				*TrasformationMatrixData3 = wvpMatrix3;
+			} else {
+				if (isPlayed) {
+					materialData[0] = { tri1Color.x, tri1Color.y, tri1Color.z, 1.0f };
+					materialData2[0] = { tri2Color.x, tri2Color.y, tri2Color.z, 1.0f };
+					materialData3[0] = { tri3Color.x, tri3Color.y, tri3Color.z, 1.0f };
+
+					transform.translate = tri1Pos;
+					transform2.translate = tri2Pos;
+					transform3.translate = tri3Pos;
+
+					transform.rotate = tri1Rot;
+					transform2.rotate = tri2Rot;
+					transform3.rotate = tri3Rot;
+				}
+
+
+				isPlayed = false;
+				t = 0;
+			}
+
+			// 三角形の座標変換
+			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			Matrix4x4 wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+			// WVPにデータを書き込む
+			*TrasformationMatrixData = wvpMatrix;
+
+			Matrix4x4 worldMatrix2 = MakeAffineMatrix(transform2.scale, transform2.rotate, transform2.translate);
+			Matrix4x4 wvpMatrix2 = Multiply(worldMatrix2, Multiply(viewMatrix, projectionMatrix));
+			*TrasformationMatrixData2 = wvpMatrix2;
+
+			//ここに更新処理を書く-----------------------------------------------------------
+
+
+			//ここに描画処理を書く-----------------------------------------------------------
+
 			//-------------imguiの初期化-------------//
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
 			ImGui::NewFrame();
 			//-------------imguiの初期化-------------//
-			
-			//ここに更新処理を書く
 
-			// 三角形の座標変換
-			transform.rotate.y -= 0.03f;
-			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
-			Matrix4x4 projectionMatrix = MakePerspectiveMatrix(0.45f, static_cast<float>(kClientWidth) / static_cast<float>(kClientHeight), 0.1f, 100.0f);
-			Matrix4x4 wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+			//-------------------ImGui-------------------//
+			ImGui::Begin("tri1");
 
-			// WVPにデータを書き込む
-			*TrasformationMatrixData = wvpMatrix;
+			ImGui::BulletText("Color");
+			ImGui::ColorEdit3("Color", &materialData[0].x);
+
+			ImGui::BulletText("Transform");
+			ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f, 0.0f, 2.0f);
+			ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.01f, 0.0f, 6.28f);
+			ImGui::DragFloat3("Translate", &transform.translate.x, 0.01f, -30.0f, 30.0f);
+
+			ImGui::End();
+
+			ImGui::Begin("tri2");
+
+			ImGui::BulletText("Color");
+			ImGui::ColorEdit3("Color", &materialData2[0].x);
+
+			ImGui::BulletText("Transform");
+			ImGui::DragFloat3("Scale", &transform2.scale.x, 0.01f, 0.0f, 2.0f);
+			ImGui::DragFloat3("Rotate", &transform2.rotate.x, 0.01f, 0.0f, 6.28f);
+			ImGui::DragFloat3("Translate", &transform2.translate.x, 0.01f, -30.0f, 30.0f);
+
+			ImGui::End();
+
+			if (isPlaying) {
+				ImGui::Begin("tri3");
+
+				ImGui::BulletText("Color");
+				ImGui::ColorEdit3("Color", &materialData3[0].x);
+
+				ImGui::BulletText("Transform");
+				ImGui::DragFloat3("Scale", &transform3.scale.x, 0.01f, 0.0f, 2.0f);
+				ImGui::DragFloat3("Rotate", &transform3.rotate.x, 0.01f, 0.0f, 6.28f);
+				ImGui::DragFloat3("Translate", &transform3.translate.x, 0.01f, -10.0f, 10.0f);
+				ImGui::End();
+			}
+
+			ImGui::Begin("Options");
+			if (isTextureVisible) {
+				isTexVisible->visible = 1.0f;
+			} else {
+				isTexVisible->visible = 0.0f;
+			}
+			ImGui::Checkbox("TextureVisibility", &isTextureVisible);
+			ImGui::Checkbox("useMonsterBall", &isMonsterBall);
+			if (ImGui::Button("Play", ImVec2(50, 50))) {
+				isPlaying = !isPlaying;
+			}
+
+			ImGui::End();
+			//-------------------ImGui-------------------//
 
 			// バックバッファのインデックスを取得
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -711,21 +923,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->RSSetViewports(1, &viewPort);
 			commandList->RSSetScissorRects(1, &scissorRect);
 
-			//-------------------ImGui-------------------//
-			ImGui::Begin("Transform");
-			ImGui::SliderFloat3("Scale", &transform.scale.x, 0.0f, 2.0f);
-			ImGui::SliderFloat3("Rotate", &transform.rotate.x, 0.0f, 6.28f);
-			ImGui::SliderFloat3("Translate", &transform.translate.x, -2.0f, 2.0f);
-			ImGui::Checkbox("useMonsterBall", &isMonsterBall);
-			ImGui::End();
-
-			ImGui::Begin("Camera");
-			ImGui::SliderFloat3("Scale", &cameraTransform.scale.x, 0.0f, 2.0f);
-			ImGui::SliderFloat3("Rotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
-			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, 0.0f, 30.0f);
-			ImGui::End();
-			//-------------------ImGui-------------------//
-
 			// ImGuiの内部コマンドを生成。描画処理の前に行う
 			ImGui::Render();
 
@@ -744,15 +941,30 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			// Textureの設定
 			commandList->SetGraphicsRootDescriptorTable(2, isMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
+			// TextureVisibilityの設定
+			commandList->SetGraphicsRootConstantBufferView(3, TexVsibilityCBR->GetGPUVirtualAddress());
+
 			// 描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			commandList->DrawInstanced(3, 1, 0, 0);
+
+			commandList->SetGraphicsRootConstantBufferView(0, materialResource2->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource2->GetGPUVirtualAddress());
+
+			commandList->DrawInstanced(3, 1, 0, 0);
+
+			if (isPlaying) {
+				commandList->SetGraphicsRootConstantBufferView(0, materialResource3->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootConstantBufferView(1, wvpResource3->GetGPUVirtualAddress());
+
+				commandList->DrawInstanced(3, 1, 0, 0);
+			}
 			//-----------三角形の描画-----------//
 
 
 			//-----------Spriteの描画-----------//
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			commandList->SetGraphicsRootConstantBufferView(1, TrasformationMatrixResourceSprite->GetGPUVirtualAddress());
-			commandList->DrawInstanced(6, 1, 0, 0);
+			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//commandList->SetGraphicsRootConstantBufferView(1, TrasformationMatrixResourceSprite->GetGPUVirtualAddress());
+			//commandList->DrawInstanced(6, 1, 0, 0);
 			//-----------Spriteの描画-----------//
 
 
@@ -793,7 +1005,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			hr = commandList->Reset(commandAllocator, nullptr);
 			assert(SUCCEEDED(hr));
 
-			//ここに描画処理を書く
+			//ここに描画処理を書く-----------------------------------------------------------
 
 		}
 	}
@@ -806,8 +1018,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
-
-	// リソースの解放
 	intermediateResource->Release();
 	intermediateResource2->Release();
 	textureResource->Release();
