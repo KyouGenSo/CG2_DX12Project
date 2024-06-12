@@ -27,6 +27,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 #include"externals/DirectXTex/DirectXTex.h"
 
+#define PI 3.14159265359f
+
 
 //クライアント領域のサイズ
 const int32_t kClientWidth = 1280;
@@ -70,6 +72,7 @@ ID3D12Resource* CeateDepthStencilResource(ID3D12Device* device, int32_t width, i
 D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
 
 D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
+
 
 //-----------------------------------------FUNCTION-----------------------------------------//
 
@@ -439,7 +442,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//-------------------------------------Resource------------------------------------------//
 
 	// 頂点バッファのリソースを作る。頂点三つ分のサイズ----------------------------------------------//
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
+	
+	const int kVertexCount = 16 * 16 * 6;
+
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * kVertexCount);
 
 	//VertexBufferView
 	// 頂点バッファビューを作成する
@@ -447,7 +453,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// リソースの先頭アドレスから使う
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 	// 使用するリソースのサイズは頂点三つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * kVertexCount;
 	// 一つの頂点のサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
@@ -455,25 +461,56 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	VertexData* vertexData = nullptr;
 	// アドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
-	// 左下
-	vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
-	vertexData[0].texcoord = { 0.0f, 1.0f };
-	// 上
-	vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
-	vertexData[1].texcoord = { 0.5f, 0.0f };
-	// 右下
-	vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
-	vertexData[2].texcoord = { 1.0f, 1.0f };
 
-	// 二つ目の三角形
-	vertexData[3].position = { -0.5f, -0.5f, -0.5f, 1.0f }; // 左下
-	vertexData[3].texcoord = { 0.0f, 1.0f };
+	// 球の頂点データを作成
+	const uint32_t kSubdivision = 16;
+	const float kLonEvery = DirectX::XM_2PI / float(kSubdivision);
+	const float kLatEvery = DirectX::XM_PI / float(kSubdivision);
 
-	vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; // 上
-	vertexData[4].texcoord = { 0.5f, 0.0f };
+	for (int latIndex = 0; latIndex < kSubdivision; latIndex++) {
+		float theta = -DirectX::XM_PIDIV2 + kLatEvery * latIndex;
 
-	vertexData[5].position = { 0.5f, -0.5f, 0.5f, 1.0f }; // 右下
-	vertexData[5].texcoord = { 1.0f, 1.0f };
+		for (int lonIndex = 0; lonIndex < kSubdivision; lonIndex++) {
+			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
+			float phi = kLonEvery * lonIndex;
+
+			vertexData[start].position.x = cos(theta) * cos(phi);
+			vertexData[start].position.y = sin(theta);
+			vertexData[start].position.z = cos(theta) * sin(phi);
+			vertexData[start].position.w = 1.0f;
+			vertexData[start].texcoord = { float(lonIndex) / kSubdivision, 1.0f - float(latIndex) / kSubdivision };
+
+			vertexData[start + 1].position.x = cos(theta + kLatEvery) * cos(phi);
+			vertexData[start + 1].position.y = sin(theta + kLatEvery);
+			vertexData[start + 1].position.z = cos(theta + kLatEvery) * sin(phi);
+			vertexData[start + 1].position.w = 1.0f;
+			vertexData[start + 1].texcoord = { float(lonIndex) / kSubdivision, 1.0f - float(latIndex + 1) / kSubdivision };
+
+			vertexData[start + 2].position.x = cos(theta) * cos(phi + kLonEvery);
+			vertexData[start + 2].position.y = sin(theta);
+			vertexData[start + 2].position.z = cos(theta) * sin(phi + kLonEvery);
+			vertexData[start + 2].position.w = 1.0f;
+			vertexData[start + 2].texcoord = { float(lonIndex + 1) / kSubdivision, 1.0f - float(latIndex) / kSubdivision };
+
+			vertexData[start + 3].position.x = cos(theta) * cos(phi + kLonEvery);
+			vertexData[start + 3].position.y = sin(theta);
+			vertexData[start + 3].position.z = cos(theta) * sin(phi + kLonEvery);
+			vertexData[start + 3].position.w = 1.0f;
+			vertexData[start + 3].texcoord = { float(lonIndex + 1) / kSubdivision, 1.0f - float(latIndex) / kSubdivision };
+
+			vertexData[start + 4].position.x = cos(theta + kLatEvery) * cos(phi);
+			vertexData[start + 4].position.y = sin(theta + kLatEvery);
+			vertexData[start + 4].position.z = cos(theta + kLatEvery) * sin(phi);
+			vertexData[start + 4].position.w = 1.0f;
+			vertexData[start + 4].texcoord = { float(lonIndex) / kSubdivision, 1.0f - float(latIndex + 1) / kSubdivision };
+
+			vertexData[start + 5].position.x = cos(theta + kLatEvery) * cos(phi + kLonEvery);
+			vertexData[start + 5].position.y = sin(theta + kLatEvery);
+			vertexData[start + 5].position.z = cos(theta + kLatEvery) * sin(phi + kLonEvery);
+			vertexData[start + 5].position.w = 1.0f;
+			vertexData[start + 5].texcoord = { float(lonIndex + 1) / kSubdivision, 1.0f - float(latIndex + 1) / kSubdivision };
+		}
+	}
 
 
 	// マテリアル用のリソースを作る。今回はcolor1つ分のサイズ--------------------------------------//
@@ -496,7 +533,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	*TrasformationMatrixData = MakeIdentityMatrix4x4();
 
 	Transform transform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
-	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -5.0f} };
+	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -10.0f} };
 
 	// Textureを読んで転送する---------------------------------------------------------------//
 	// 一枚目のTextureの読み込み
@@ -745,14 +782,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootDescriptorTable(2, isMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			// 描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			commandList->DrawInstanced(kVertexCount, 1, 0, 0);
 			//-----------三角形の描画-----------//
 
 
 			//-----------Spriteの描画-----------//
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			commandList->SetGraphicsRootConstantBufferView(1, TrasformationMatrixResourceSprite->GetGPUVirtualAddress());
-			commandList->DrawInstanced(6, 1, 0, 0);
+			
+			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//commandList->SetGraphicsRootConstantBufferView(1, TrasformationMatrixResourceSprite->GetGPUVirtualAddress());
+			//commandList->DrawInstanced(6, 1, 0, 0);
+			
 			//-----------Spriteの描画-----------//
 
 
@@ -1123,3 +1162,36 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 	handle.ptr += (descriptorSize * index);
 	return handle;
 }
+
+
+//// 頂点の数
+//int vertexCount = slice * stack * 6;
+
+//// 頂点のリサイズ
+//vertices.resize(vertexCount);
+
+//// 頂点の作成
+//for (int i = 0; i <= stack; i++)
+//{
+//	float phi = DirectX::XM_PI * i / stack;
+//	for (int j = 0; j <= slice; j++)
+//	{
+//		float theta = DirectX::XM_2PI * j / slice;
+//		vertices[i * (slice + 1) + j].position = {
+//			radius * sinf(phi) * cosf(theta),
+//			radius * cosf(phi),
+//			radius * sinf(phi) * sinf(theta),
+//			1.0f
+//		};
+//		vertices[i * (slice + 1) + j].normal = {
+//			sinf(phi) * cosf(theta),
+//			cosf(phi),
+//			sinf(phi) * sinf(theta),
+//			1.0f
+//		};
+//		vertices[i * (slice + 1) + j].texcoord = {
+//			1.0f - static_cast<float>(j) / slice,
+//			1.0f - static_cast<float>(i) / stack
+//		};
+//	}
+//}
