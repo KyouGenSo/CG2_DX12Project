@@ -3,6 +3,14 @@
 struct Material
 {
     float32_t4 color;
+    int32_t enableLighting;
+};
+
+struct DirectionalLight
+{
+    float32_t4 color;
+    float32_t3 direction;
+    float intensity;
 };
 
 struct PixelShaderOutput
@@ -11,14 +19,23 @@ struct PixelShaderOutput
 };
 
 ConstantBuffer<Material> gMaterial : register(b0);
+ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 Texture2D<float32_t4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
-
-
 
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
-    output.color = gTexture.Sample(gSampler, input.texcoord) * gMaterial.color;
+    
+    if (gMaterial.enableLighting != 0)
+    {
+        float cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
+        output.color = gTexture.Sample(gSampler, input.texcoord) * gMaterial.color * gDirectionalLight.color * gDirectionalLight.intensity * cos;
+    }
+    else
+    {
+        output.color = gTexture.Sample(gSampler, input.texcoord) * gMaterial.color;
+    }
+    
     return output;
 }
