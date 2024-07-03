@@ -70,6 +70,8 @@ struct Material
 {
 	Vector4 color;
 	int32_t enableLighting;
+	float padding[3];
+	Matrix4x4 uvTransform;
 };
 
 struct TransformationMatrix
@@ -637,6 +639,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	materialData[0].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	// ライティングを有効にする
 	materialData[0].enableLighting = true;
+	// uvTransformを初期化
+	materialData[0].uvTransform = MakeIdentityMatrix4x4();
 
 
 	// WVP用のCBufferリソースを作る。----------------------------------------------//
@@ -790,6 +794,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	materialDataSprite[0].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	// ライティングを無効にする
 	materialDataSprite[0].enableLighting = false;
+	// uvTransformを初期化
+	materialDataSprite[0].uvTransform = MakeIdentityMatrix4x4();
+
+	Transform uvTransformSprite{ 
+		{1.0f, 1.0f, 1.0f}, 
+		{0.0f, 0.0f, 0.0f}, 
+		{0.0f, 0.0f, 0.0f},
+	};
 
 	// 平行光源のリソースを作成---------------------------------------------------------------//
 	ID3D12Resource* lightResource = CreateBufferResource(device, sizeof(DirectionalLight));
@@ -886,13 +898,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			TrasformationMatrixData->WVP = wvpMatrix;
 			TrasformationMatrixData->world = worldMatrix;
 
+			// Spriteの座標変換
 			worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			viewMatrixSprite = Inverse(cameraMatrix);
 			wvpMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 
-			// Spriteの座標変換
 			TrasformationMatrixDataSprite->WVP = wvpMatrixSprite;
 			TrasformationMatrixDataSprite->world = worldMatrixSprite;
+
+			// SpriteのuvTransform
+			Matrix4x4 uvTransformMatrix = MakeAffineMatrix(uvTransformSprite.scale, uvTransformSprite.rotate, uvTransformSprite.translate);
+			materialDataSprite[0].uvTransform = uvTransformMatrix;
 
 			// バックバッファのインデックスを取得
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -930,31 +946,50 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->RSSetScissorRects(1, &scissorRect);
 
 			//-------------------ImGui-------------------//
-			ImGui::Begin("Ball");
-			ImGui::DragFloat3("Scale", &transform.scale.x, 0.1f, 0.0f, 50.0f);
-			ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.1f, 0.0f, 6.28f);
-			ImGui::DragFloat3("Translate", &transform.translate.x, 0.1f, -50.0f, 50.0f);
-			ImGui::Checkbox("useMonsterBall", &isMonsterBall);
-			ImGui::ColorEdit4("Color", &materialData[0].color.x);
-			ImGui::End();
+			ImGui::Begin("Option");
 
-			ImGui::Begin("Sprite");
-			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.1f, 0.0f, 50.0f);
-			ImGui::DragFloat3("Rotate", &transformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
-			ImGui::DragFloat3("Translate", &transformSprite.translate.x, 0.1f, -50.0f, 50.0f);
-			ImGui::ColorEdit4("Color", &materialDataSprite[0].color.x);
-			ImGui::End();
-
-			ImGui::Begin("Camera");
-			ImGui::SliderFloat3("Scale", &cameraTransform.scale.x, 0.0f, 2.0f);
-			ImGui::SliderFloat3("Rotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
-			ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, 0.0f, 30.0f);
-			ImGui::End();
-
-			ImGui::Begin("Light");
-			ImGui::DragFloat3("Direction", &lightData[0].direction.x, 0.1f, -1.0f, 1.0f);
-			ImGui::ColorEdit4("Color", &lightData[0].color.x);
-			ImGui::DragFloat("Intensity", &lightData[0].intensity, 0.1f, 0.0f, 10.0f);
+			if (ImGui::BeginTabBar("Option"))
+			{
+				if (ImGui::BeginTabItem("Ball"))
+				{
+					ImGui::DragFloat3("Scale", &transform.scale.x, 0.1f, 0.0f, 50.0f);
+					ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.1f, 0.0f, 6.28f);
+					ImGui::DragFloat3("Translate", &transform.translate.x, 0.1f, -50.0f, 50.0f);
+					ImGui::Checkbox("useMonsterBall", &isMonsterBall);
+					ImGui::ColorEdit4("Color", &materialData[0].color.x);
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Sprite"))
+				{
+					ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.1f, 0.0f, 50.0f);
+					ImGui::DragFloat3("Rotate", &transformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
+					ImGui::DragFloat3("Translate", &transformSprite.translate.x, 0.1f, -50.0f, 50.0f);
+					ImGui::ColorEdit4("Color", &materialDataSprite[0].color.x);
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Camera"))
+				{
+					ImGui::SliderFloat3("Scale", &cameraTransform.scale.x, 0.0f, 2.0f);
+					ImGui::SliderFloat3("Rotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
+					ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, 0.0f, 30.0f);
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Light"))
+				{
+					ImGui::DragFloat3("Direction", &lightData[0].direction.x, 0.1f, -1.0f, 1.0f);
+					ImGui::ColorEdit4("Color", &lightData[0].color.x);
+					ImGui::DragFloat("Intensity", &lightData[0].intensity, 0.1f, 0.0f, 10.0f);
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("UVTransform"))
+				{
+					ImGui::DragFloat3("Scale", &uvTransformSprite.scale.x, 0.1f, 0.0f, 50.0f);
+					ImGui::DragFloat3("Rotate", &uvTransformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
+					ImGui::DragFloat3("Translate", &uvTransformSprite.translate.x, 0.1f, -50.0f, 50.0f);
+					ImGui::EndTabItem();
+				}
+				ImGui::EndTabBar();
+			}
 			ImGui::End();
 			//-------------------ImGui-------------------//
 
