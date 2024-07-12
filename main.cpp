@@ -669,7 +669,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 	// Textureを読んで転送する---------------------------------------------------------------//
-	DirectX::ScratchImage mipImages = LoadTexture("resources/blloomTest1.png");
+	DirectX::ScratchImage mipImages = LoadTexture("resources/blloomTest2.png");
 	const DirectX::TexMetadata& metaData = mipImages.GetMetadata();
 	ID3D12Resource* textureResource = CreateTextureResource(device, metaData);
 	UploadTextureData(textureResource, mipImages);
