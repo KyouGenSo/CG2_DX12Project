@@ -487,6 +487,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// BlendState
 	D3D12_BLEND_DESC blendDesc{};
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	blendDesc.RenderTarget[0].BlendEnable = TRUE;
+	blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+
 
 	// RasterizerState
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
@@ -981,7 +989,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 			// Spriteの座標変換
 			worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
-			viewMatrixSprite = Inverse(cameraMatrix);
+			viewMatrixSprite = MakeIdentityMatrix4x4();
 			wvpMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 
 			TrasformationMatrixDataSprite->WVP = wvpMatrixSprite;
@@ -1044,12 +1052,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				{
 					ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.1f, 0.0f, 50.0f);
 					ImGui::DragFloat3("Rotate", &transformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
-					ImGui::DragFloat3("Translate", &transformSprite.translate.x, 0.1f, -50.0f, 50.0f);
+					ImGui::DragFloat3("Translate", &transformSprite.translate.x, 1.f, -1000.0f, 1000.0f);
 					ImGui::ColorEdit4("Color", &materialDataSprite[0].color.x);
-					ImGui::Text("UVTransform");
-					ImGui::DragFloat3("Scale", &uvTransformSprite.scale.x, 0.1f, 0.0f, 50.0f);
-					ImGui::DragFloat3("Rotate", &uvTransformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
-					ImGui::DragFloat3("Translate", &uvTransformSprite.translate.x, 0.1f, -50.0f, 50.0f);
+
+					if (ImGui::CollapsingHeader("uvTransform"))
+					{
+						ImGui::BeginChild("uvTransform");
+						ImGui::Text("UVTransform");
+						ImGui::DragFloat3("Scale", &uvTransformSprite.scale.x, 0.1f, 0.0f, 50.0f);
+						ImGui::DragFloat3("Rotate", &uvTransformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
+						ImGui::DragFloat3("Translate", &uvTransformSprite.translate.x, 0.1f, -50.0f, 50.0f);
+						ImGui::EndChild();
+					}
+
+
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("Camera"))
@@ -1088,7 +1104,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			// Textureの設定
 			commandList->SetGraphicsRootDescriptorTable(2, isMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
-
 			// Lightの設定
 			commandList->SetGraphicsRootConstantBufferView(3, lightResource->GetGPUVirtualAddress());
 
@@ -1107,7 +1122,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->IASetIndexBuffer(&indexBufferViewSprite);
-			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 			//-----------Spriteの描画-----------//
 
 
