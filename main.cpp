@@ -546,25 +546,47 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// Modelのリソースを作る------------------------------------------------------------------------//
 
-	// modelのデータを読み込む
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	enum ModelType {
+		Plane,
+		Teapot,
+	};
+
+	ModelType modelType = Plane;
+
+	// Planeのデータを読み込む
+	ModelData planeData = LoadObjFile("resources", "plane.obj");
 
 	// 頂点リソースを作る
-	Microsoft::WRL::ComPtr<ID3D12Resource> modelVertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * modelData.vertices.size());
-	//ID3D12Resource* vertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * modelData.vertices.size());
+	Microsoft::WRL::ComPtr<ID3D12Resource> planeVertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * planeData.vertices.size());
 
 	// 頂点バッファビューを作る
-	D3D12_VERTEX_BUFFER_VIEW modelVertexBufferView{};
-	modelVertexBufferView.BufferLocation = modelVertexResource->GetGPUVirtualAddress();
-	modelVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
-	modelVertexBufferView.StrideInBytes = sizeof(VertexData);
+	D3D12_VERTEX_BUFFER_VIEW planeVertexBufferView{};
+	planeVertexBufferView.BufferLocation = planeVertexResource->GetGPUVirtualAddress();
+	planeVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * planeData.vertices.size());
+	planeVertexBufferView.StrideInBytes = sizeof(VertexData);
 
 	// 頂点リソースにデータを書き込む
-	VertexData* modelVertexData = nullptr;
-	modelVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&modelVertexData));
-	memcpy(modelVertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
+	VertexData* planeVertexData = nullptr;
+	planeVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&planeVertexData));
+	memcpy(planeVertexData, planeData.vertices.data(), sizeof(VertexData) * planeData.vertices.size());
 
 
+	// Teapotのデータを読み込む
+	ModelData teapotData = LoadObjFile("resources", "teapot.obj");
+
+	// 頂点リソースを作る
+	Microsoft::WRL::ComPtr<ID3D12Resource> teapotVertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * teapotData.vertices.size());
+
+	// 頂点バッファビューを作る
+	D3D12_VERTEX_BUFFER_VIEW teapotVertexBufferView{};
+	teapotVertexBufferView.BufferLocation = teapotVertexResource->GetGPUVirtualAddress();
+	teapotVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * teapotData.vertices.size());
+	teapotVertexBufferView.StrideInBytes = sizeof(VertexData);
+
+	// 頂点リソースにデータを書き込む
+	VertexData* teapotVertexData = nullptr;
+	teapotVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&teapotVertexData));
+	memcpy(teapotVertexData, teapotData.vertices.data(), sizeof(VertexData)* teapotData.vertices.size());
 
 	// 球のリソースを作る----------------------------------------------//
 
@@ -768,33 +790,52 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// 一枚目のSRVを作成
 	device->CreateShaderResourceView(textureResource.Get(), &srvDesc, textureSrvHandleCPU);
 
-	// 二枚目のTextureの読み込み
+	// planeのTextureの読み込み
 	//DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
-	DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.texturePath);
-	const DirectX::TexMetadata& metaData2 = mipImages2.GetMetadata();
+	DirectX::ScratchImage planeMipImages = LoadTexture(planeData.material.texturePath);
+	const DirectX::TexMetadata& metaData2 = planeMipImages.GetMetadata();
 	// Texture用のリソースを作成
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = CreateTextureResource(device.Get(), metaData2);
 	//ID3D12Resource* textureResource2 = CreateTextureResource(device, metaData2);
 	// Textureのデータを転送
-	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2 = UploadTextureData(textureResource2.Get(), mipImages2, device.Get(), commandList.Get());
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2 = UploadTextureData(textureResource2.Get(), planeMipImages, device.Get(), commandList.Get());
 	//ID3D12Resource* intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
 
-	// 二枚目のTexture用のSRVを作成
+	// SRVを作成
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2{};
 	srvDesc2.Format = metaData2.format;
 	srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ
 	srvDesc2.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc2.Texture2D.MipLevels = UINT(metaData2.mipLevels);
 
-	// 二枚目のSRVを作成するDescriptorの位置を決める
+	// SRVを作成するDescriptorの位置を決める
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
 
-	// 二枚目のSRVを作成
+	// SRVを作成
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
 
-	// Texture切り替え用変数
-	bool isMonsterBall = false;
+	// teapotのTextureの読み込み
+	DirectX::ScratchImage teapotMipImages = LoadTexture(teapotData.material.texturePath);
+	const DirectX::TexMetadata& metaData3 = teapotMipImages.GetMetadata();
+	// Texture用のリソースを作成
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource3 = CreateTextureResource(device.Get(), metaData3);
+	// Textureのデータを転送
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource3 = UploadTextureData(textureResource3.Get(), teapotMipImages, device.Get(), commandList.Get());
+
+	// SRVを作成
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc3{};
+	srvDesc3.Format = metaData3.format;
+	srvDesc3.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ
+	srvDesc3.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc3.Texture2D.MipLevels = UINT(metaData3.mipLevels);
+
+	// SRVを作成するDescriptorの位置を決める
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU3 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
+
+	// SRVを作成
+	device->CreateShaderResourceView(textureResource3.Get(), &srvDesc3, textureSrvHandleCPU3);
 
 	// Sprite用の頂点リソースを作成---------------------------------------------------------------//
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResourceSprite = CreateBufferResource(device.Get(), sizeof(VertexData) * 6);
@@ -1062,22 +1103,47 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 			//-------------------ImGui-------------------//
 			ImGui::Begin("Option");
+			//// modelのデータを読み込む
+			//ModelData modelData = LoadObjFile("resources", "plane.obj");
 
+			//// 頂点リソースを作る
+			//Microsoft::WRL::ComPtr<ID3D12Resource> modelVertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * modelData.vertices.size());
+
+			//// 頂点バッファビューを作る
+			//D3D12_VERTEX_BUFFER_VIEW modelVertexBufferView{};
+			//modelVertexBufferView.BufferLocation = modelVertexResource->GetGPUVirtualAddress();
+			//modelVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
+			//modelVertexBufferView.StrideInBytes = sizeof(VertexData);
+
+			//// 頂点リソースにデータを書き込む
+			//VertexData* modelVertexData = nullptr;
+			//modelVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&modelVertexData));
+			//memcpy(modelVertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 			if (ImGui::BeginTabBar("Option"))
 			{
-				if (ImGui::BeginTabItem("Model"))
+				if (ImGui::BeginTabItem("obj Model"))
 				{
+					const char* ModelType_items[] = { "Plane", "teapot" };
+					static int ModelType_item_current = 0;
+					ImGui::Combo("ModelType", &ModelType_item_current, ModelType_items, IM_ARRAYSIZE(ModelType_items));
+					if (ImGui::Button("Load"))
+					{
+						if (ModelType_item_current == 0)
+						{
+							modelType = ModelType::Plane;
+						}
+						else if (ModelType_item_current == 1)
+						{
+							modelType = ModelType::Teapot;
+						}
+					}
+
+					ImGui::Separator();
+
 					ImGui::DragFloat3("Scale", &modelTransform.scale.x, 0.1f, 0.0f, 50.0f);
 					ImGui::DragFloat3("Rotate", &modelTransform.rotate.x, 0.1f, 0.0f, 6.28f);
 					ImGui::DragFloat3("Translate", &modelTransform.translate.x, 0.1f, -50.0f, 50.0f);
 					ImGui::ColorEdit4("Color", &materialData[0].color.x);
-
-					ImGui::Separator();
-
-					ImGui::Checkbox("useMonsterBall", &isMonsterBall);
-					const char* ModelType_items[] = { "Plane", "Sphere", "MultiMesh" };
-					static int ModelType_item_current = 0;
-					ImGui::Combo("ModelType", &ModelType_item_current, ModelType_items, IM_ARRAYSIZE(ModelType_items));
 
 					ImGui::EndTabItem();
 				}
@@ -1094,13 +1160,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 					ImGui::DragFloat3("Rotate", &transformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
 					ImGui::DragFloat3("Translate", &transformSprite.translate.x, 1.0f, -100.0f, 100.0f);
 					ImGui::ColorEdit4("Color", &materialDataSprite[0].color.x);
-					ImGui::EndTabItem();
-				}
-				if (ImGui::BeginTabItem("Sprite UVTransform"))
-				{
-					ImGui::DragFloat2("Scale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-					ImGui::DragFloat2("Translate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-					ImGui::SliderAngle("Rotate", &uvTransformSprite.rotate.z);
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("Light"))
@@ -1120,6 +1179,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				ImGui::EndTabBar();
 			}
 			ImGui::End();
+
+			ImGui::Begin("UVTransform");
+			if (ImGui::BeginTabBar("Option"))
+			{
+				if (ImGui::BeginTabItem("Sprite"))
+				{
+					ImGui::DragFloat2("Scale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+					ImGui::DragFloat2("Translate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+					ImGui::SliderAngle("Rotate", &uvTransformSprite.rotate.z);
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Model"))
+				{
+					ImGui::DragFloat2("Scale", &uvTransformModel.scale.x, 0.01f, -10.0f, 10.0f);
+					ImGui::DragFloat2("Translate", &uvTransformModel.translate.x, 0.01f, -10.0f, 10.0f);
+					ImGui::SliderAngle("Rotate", &uvTransformModel.rotate.z);
+					ImGui::EndTabItem();
+				}
+				ImGui::EndTabBar();
+			}
+			ImGui::End();
+
 			//-------------------ImGui-------------------//
 
 			// ImGuiの内部コマンドを生成。描画処理の前に行う
@@ -1137,23 +1218,39 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(1, modelWvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
 
 			// Textureの設定
-			commandList->SetGraphicsRootDescriptorTable(2, isMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
-
+			//commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU2);
 
 			// Lightの設定
 			commandList->SetGraphicsRootConstantBufferView(3, lightResource->GetGPUVirtualAddress());
 
-			commandList->IASetVertexBuffers(0, 1, &modelVertexBufferView);
+			if (modelType == 0)
+			{
+				// Textureの設定
+				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU2);
 
-			//commandList->IASetIndexBuffer(&indexBufferView);
+				commandList->IASetVertexBuffers(0, 1, &planeVertexBufferView);
 
-			// 描画
-			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+				// 描画
+				commandList->DrawInstanced(UINT(planeData.vertices.size()), 1, 0, 0);
+			} else if (modelType == 1)
+			{
+				// Textureの設定
+				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU3);
+
+				commandList->IASetVertexBuffers(0, 1, &teapotVertexBufferView);
+
+				// 描画
+				commandList->DrawInstanced(UINT(teapotData.vertices.size()), 1, 0, 0);
+			}
+
 			//-----------Modelの描画-----------//
 
 			//-----------Sphereの描画-----------//
 			// WVPのcBufferの設定
 			commandList->SetGraphicsRootConstantBufferView(1, sphereWvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
+
+			// Textureの設定
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			commandList->IASetVertexBuffers(0, 1, &sphereVertexBufferView);
 
@@ -1226,7 +1323,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	ImGui::DestroyContext();
 
 	// リソースの解放
-	
+
 	dxcUtils->Release();
 	dxcCompiler->Release();
 	vertexShaderBlob->Release();
