@@ -72,7 +72,7 @@ struct VertexEqual {
 struct Material
 {
 	Vector4 color;
-	int32_t enableLighting;
+	bool enableLighting;
 	float padding[3];
 	Matrix4x4 uvTransform;
 };
@@ -87,6 +87,7 @@ struct DirectionalLight
 {
 	Vector4 color;
 	Vector3 direction;
+	int32_t lightType;
 	float intensity;
 };
 
@@ -911,6 +912,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	lightData[0].direction = Vector3(0.0f, -1.0f, 0.0f);
 	// ライトの色
 	lightData[0].color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	// ライトのタイプ
+	// 0:Lambert 1:Half-Lambert
+	lightData[0].lightType = 0;
+
 	// 輝度
 	lightData[0].intensity = 1.0f;
 
@@ -1098,18 +1103,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 					ImGui::SliderAngle("Rotate", &uvTransformSprite.rotate.z);
 					ImGui::EndTabItem();
 				}
-				if (ImGui::BeginTabItem("Camera"))
-				{
-					ImGui::SliderFloat3("Scale", &cameraTransform.scale.x, 0.0f, 2.0f);
-					ImGui::SliderFloat3("Rotate", &cameraTransform.rotate.x, 0.0f, 6.28f);
-					ImGui::SliderFloat3("Translate", &cameraTransform.translate.x, 0.0f, 30.0f);
-					ImGui::EndTabItem();
-				}
 				if (ImGui::BeginTabItem("Light"))
 				{
+					ImGui::Checkbox("EnableLighting", &materialData[0].enableLighting);
+					ImGui::Separator();
 					ImGui::DragFloat3("Direction", &lightData[0].direction.x, 0.1f, -1.0f, 1.0f);
 					ImGui::ColorEdit4("Color", &lightData[0].color.x);
 					ImGui::DragFloat("Intensity", &lightData[0].intensity, 0.1f, 0.0f, 10.0f);
+					ImGui::Separator();
+					const char* LightType_items[] = { "Lambert", "Half-Lambert" };
+					static int LightType_item_current = 0;
+					ImGui::Combo("LightType", &LightType_item_current, LightType_items, IM_ARRAYSIZE(LightType_items));
+					lightData[0].lightType = LightType_item_current;
 					ImGui::EndTabItem();
 				}
 				ImGui::EndTabBar();
