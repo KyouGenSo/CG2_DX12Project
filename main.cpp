@@ -541,19 +541,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	//-----------------------------------------PSO-----------------------------------------///
 
 
-	//-------------------------------------Resource------------------------------------------//
+	//-------------------------------------------------------------------------------------------------------------------
+	//                                                                                                                   
+	//                                                  Resourceの作成                                                    
+	//                                                                                                                   
+	//-------------------------------------------------------------------------------------------------------------------
 
-
-	// Modelのリソースを作る------------------------------------------------------------------------//
-
+	//------------------------------------------------------Model------------------------------------------------------
 	enum ModelType {
 		Plane,
 		Teapot,
+		Bunny
 	};
 
 	ModelType modelType = Plane;
 
-	// Planeのデータを読み込む
+
+	// Planeのデータを読み込む------------------------------------------------------------
 	ModelData planeData = LoadObjFile("resources", "plane.obj");
 
 	// 頂点リソースを作る
@@ -571,7 +575,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	memcpy(planeVertexData, planeData.vertices.data(), sizeof(VertexData) * planeData.vertices.size());
 
 
-	// Teapotのデータを読み込む
+	// Teapotのデータを読み込む------------------------------------------------------------
 	ModelData teapotData = LoadObjFile("resources", "teapot.obj");
 
 	// 頂点リソースを作る
@@ -588,8 +592,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	teapotVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&teapotVertexData));
 	memcpy(teapotVertexData, teapotData.vertices.data(), sizeof(VertexData)* teapotData.vertices.size());
 
-	// 球のリソースを作る----------------------------------------------//
 
+	// Bunnyのデータを読み込む---------------------------------------------------------
+	ModelData bunnyData = LoadObjFile("resources", "bunny.obj");
+
+	// 頂点リソースを作る
+	Microsoft::WRL::ComPtr<ID3D12Resource> bunnyVertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * bunnyData.vertices.size());
+
+	// 頂点バッファビューを作る
+	D3D12_VERTEX_BUFFER_VIEW bunnyVertexBufferView{};
+	bunnyVertexBufferView.BufferLocation = bunnyVertexResource->GetGPUVirtualAddress();
+	bunnyVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * bunnyData.vertices.size());
+	bunnyVertexBufferView.StrideInBytes = sizeof(VertexData);
+
+	// 頂点リソースにデータを書き込む
+	VertexData* bunnyVertexData = nullptr;
+	bunnyVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&bunnyVertexData));
+	memcpy(bunnyVertexData, bunnyData.vertices.data(), sizeof(VertexData)* bunnyData.vertices.size());
+
+	// 球のリソースを作る----------------------------------------------------------------------------------------------
 	const int kVertexCount = 16 * 16 * 6;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> sphereVertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * kVertexCount);
@@ -664,59 +685,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	sphereVertexBufferView.SizeInBytes = sizeof(VertexData) * uniqueVertexCount;
 	sphereIndexBufferView.SizeInBytes = sizeof(uint32_t) * kVertexCount;
+	//------------------------------------------------------Model------------------------------------------------------//
 
 
-	//// 球の頂点データを作成(normal version)-------------------------------------------------------------//
-	//const uint32_t kSubdivision = 16;
-	//const float kLonEvery = DirectX::XM_2PI / float(kSubdivision);
-	//const float kLatEvery = DirectX::XM_PI / float(kSubdivision);
-
-	//for (int latIndex = 0; latIndex < kSubdivision; latIndex++) {
-	//	float theta = -DirectX::XM_PIDIV2 + kLatEvery * latIndex;
-
-	//	for (int lonIndex = 0; lonIndex < kSubdivision; lonIndex++) {
-	//		uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
-	//		float phi = kLonEvery * lonIndex;
-
-	//		vertexData[start].position.x = cos(theta) * cos(phi);
-	//		vertexData[start].position.y = sin(theta);
-	//		vertexData[start].position.z = cos(theta) * sin(phi);
-	//		vertexData[start].position.w = 1.0f;
-	//		vertexData[start].texcoord = { float(lonIndex) / kSubdivision, 1.0f - float(latIndex) / kSubdivision };
-
-	//		vertexData[start + 1].position.x = cos(theta + kLatEvery) * cos(phi);
-	//		vertexData[start + 1].position.y = sin(theta + kLatEvery);
-	//		vertexData[start + 1].position.z = cos(theta + kLatEvery) * sin(phi);
-	//		vertexData[start + 1].position.w = 1.0f;
-	//		vertexData[start + 1].texcoord = { float(lonIndex) / kSubdivision, 1.0f - float(latIndex + 1) / kSubdivision };
-
-	//		vertexData[start + 2].position.x = cos(theta) * cos(phi + kLonEvery);
-	//		vertexData[start + 2].position.y = sin(theta);
-	//		vertexData[start + 2].position.z = cos(theta) * sin(phi + kLonEvery);
-	//		vertexData[start + 2].position.w = 1.0f;
-	//		vertexData[start + 2].texcoord = { float(lonIndex + 1) / kSubdivision, 1.0f - float(latIndex) / kSubdivision };
-
-	//		vertexData[start + 3].position.x = cos(theta) * cos(phi + kLonEvery);
-	//		vertexData[start + 3].position.y = sin(theta);
-	//		vertexData[start + 3].position.z = cos(theta) * sin(phi + kLonEvery);
-	//		vertexData[start + 3].position.w = 1.0f;
-	//		vertexData[start + 3].texcoord = { float(lonIndex + 1) / kSubdivision, 1.0f - float(latIndex) / kSubdivision };
-
-	//		vertexData[start + 4].position.x = cos(theta + kLatEvery) * cos(phi);
-	//		vertexData[start + 4].position.y = sin(theta + kLatEvery);
-	//		vertexData[start + 4].position.z = cos(theta + kLatEvery) * sin(phi);
-	//		vertexData[start + 4].position.w = 1.0f;
-	//		vertexData[start + 4].texcoord = { float(lonIndex) / kSubdivision, 1.0f - float(latIndex + 1) / kSubdivision };
-
-	//		vertexData[start + 5].position.x = cos(theta + kLatEvery) * cos(phi + kLonEvery);
-	//		vertexData[start + 5].position.y = sin(theta + kLatEvery);
-	//		vertexData[start + 5].position.z = cos(theta + kLatEvery) * sin(phi + kLonEvery);
-	//		vertexData[start + 5].position.w = 1.0f;
-	//		vertexData[start + 5].texcoord = { float(lonIndex + 1) / kSubdivision, 1.0f - float(latIndex + 1) / kSubdivision };
-	//	}
-	//}
-
-
+	//------------------------------------------------------Material------------------------------------------------------
 	// マテリアル用のリソースを作る。--------------------------------------//
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource = CreateBufferResource(device.Get(), sizeof(Material));
 	//ID3D12Resource* materialResource = CreateBufferResource(device.Get(), sizeof(Material));
@@ -736,6 +708,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		{0.0f, 0.0f, 0.0f},
 		{0.0f, 0.0f, 0.0f},
 	};
+	//------------------------------------------------------Material------------------------------------------------------//
 
 
 	// WVP用のCBufferリソースを作る。----------------------------------------------//
@@ -765,7 +738,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	Transform sphereTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
 
-	// Textureを読んで転送する---------------------------------------------------------------//
+	// ---------------------------------------------------Texture---------------------------------------------------
 	// 一枚目のTextureの読み込み
 	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
 	const DirectX::TexMetadata& metaData = mipImages.GetMetadata();
@@ -837,7 +810,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// SRVを作成
 	device->CreateShaderResourceView(textureResource3.Get(), &srvDesc3, textureSrvHandleCPU3);
 
-	// Sprite用の頂点リソースを作成---------------------------------------------------------------//
+	// ---------------------------------------------------Texture---------------------------------------------------//
+
+
+	//------------------------------------------------------Sprite------------------------------------------------------
+	// Sprite用の頂点リソースを作成//
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResourceSprite = CreateBufferResource(device.Get(), sizeof(VertexData) * 6);
 	//ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
 
@@ -878,7 +855,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	vertexDataSprite[5].texcoord = { 1.0f, 1.0f };
 	vertexDataSprite[5].normal = { 0.0f, 0.0f, -1.0f };
 
-	// Sprite用のVertexIndexを作成---------------------------------------------------------------//
+	// Sprite用のVertexIndexを作成//
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexResourceSprite = CreateBufferResource(device.Get(), sizeof(uint32_t) * 6);
 	//ID3D12Resource* indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
 
@@ -898,7 +875,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	indexDataSprite[0] = 0;	indexDataSprite[1] = 1;	indexDataSprite[2] = 2;
 	indexDataSprite[3] = 1;	indexDataSprite[4] = 4;	indexDataSprite[5] = 2;
 
-	// Sprite用のTrasformationMatrixCBufferリソースを作成---------------------------------------------------------------//
+	// Sprite用のTrasformationMatrixCBufferリソースを作成//
 	Microsoft::WRL::ComPtr<ID3D12Resource> TrasformationMatrixResourceSprite = CreateBufferResource(device.Get(), sizeof(TransformationMatrix));
 	//ID3D12Resource* TrasformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
 	// Wデータを書き込む
@@ -920,7 +897,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	TrasformationMatrixDataSprite->WVP = wvpMatrixSprite;
 	TrasformationMatrixDataSprite->world = worldMatrixSprite;
 
-	// Sprite用のMaterialリソースを作成---------------------------------------------------------------//
+	// Sprite用のMaterialリソースを作成//
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceSprite = CreateBufferResource(device.Get(), sizeof(Material));
 	//ID3D12Resource* materialResourceSprite = CreateBufferResource(device, sizeof(Material));
 
@@ -941,6 +918,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		{0.0f, 0.0f, 0.0f},
 	};
 
+	//------------------------------------------------------Sprite------------------------------------------------------//
+
+	//-------------------------------------------------------Light-------------------------------------------------------
 	// 平行光源のリソースを作成---------------------------------------------------------------//
 	Microsoft::WRL::ComPtr<ID3D12Resource> lightResource = CreateBufferResource(device.Get(), sizeof(DirectionalLight));
 	//ID3D12Resource* lightResource = CreateBufferResource(device, sizeof(DirectionalLight));
@@ -959,6 +939,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	// 輝度
 	lightData[0].intensity = 1.0f;
+	//-------------------------------------------------------Light-------------------------------------------------------//
 
 	// DepthStencilResourceの作成---------------------------------------------------------------//
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilResource(device.Get(), kClientWidth, kClientHeight);
@@ -973,7 +954,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
 	device->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, GetCPUDescriptorHandle(dsvDescriptorHeap.Get(), descriptorSizeDSV, 0));
 
-	//--------------------------Resource--------------------------//
+	//-------------------------------------------------------------------------------------------------------------------//
+	//                                                                                                                   //
+	//                                                  Resourceの作成                                                    //
+	//                                                                                                                   //
+	//-------------------------------------------------------------------------------------------------------------------//
 
 	// viewPortの設定
 	D3D12_VIEWPORT viewPort{};
@@ -1103,38 +1088,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 			//-------------------ImGui-------------------//
 			ImGui::Begin("Option");
-			//// modelのデータを読み込む
-			//ModelData modelData = LoadObjFile("resources", "plane.obj");
 
-			//// 頂点リソースを作る
-			//Microsoft::WRL::ComPtr<ID3D12Resource> modelVertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * modelData.vertices.size());
-
-			//// 頂点バッファビューを作る
-			//D3D12_VERTEX_BUFFER_VIEW modelVertexBufferView{};
-			//modelVertexBufferView.BufferLocation = modelVertexResource->GetGPUVirtualAddress();
-			//modelVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
-			//modelVertexBufferView.StrideInBytes = sizeof(VertexData);
-
-			//// 頂点リソースにデータを書き込む
-			//VertexData* modelVertexData = nullptr;
-			//modelVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&modelVertexData));
-			//memcpy(modelVertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 			if (ImGui::BeginTabBar("Option"))
 			{
 				if (ImGui::BeginTabItem("obj Model"))
 				{
-					const char* ModelType_items[] = { "Plane", "teapot" };
+					const char* ModelType_items[] = { "Plane", "teapot", "bunny" };
 					static int ModelType_item_current = 0;
 					ImGui::Combo("ModelType", &ModelType_item_current, ModelType_items, IM_ARRAYSIZE(ModelType_items));
 					if (ImGui::Button("Load"))
 					{
 						if (ModelType_item_current == 0)
 						{
-							modelType = ModelType::Plane;
+							modelType = Plane;
 						}
 						else if (ModelType_item_current == 1)
 						{
-							modelType = ModelType::Teapot;
+							modelType = Teapot;
+						}
+						else if (ModelType_item_current == 2)
+						{
+							modelType = Bunny;
 						}
 					}
 
@@ -1217,13 +1191,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			// WVPのcBufferの設定
 			commandList->SetGraphicsRootConstantBufferView(1, modelWvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
 
-			// Textureの設定
-			//commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU2);
-
 			// Lightの設定
 			commandList->SetGraphicsRootConstantBufferView(3, lightResource->GetGPUVirtualAddress());
 
-			if (modelType == 0)
+			if (modelType == Plane)
 			{
 				// Textureの設定
 				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU2);
@@ -1232,7 +1203,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				// 描画
 				commandList->DrawInstanced(UINT(planeData.vertices.size()), 1, 0, 0);
-			} else if (modelType == 1)
+			} else if (modelType == Teapot)
 			{
 				// Textureの設定
 				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU3);
@@ -1241,6 +1212,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				// 描画
 				commandList->DrawInstanced(UINT(teapotData.vertices.size()), 1, 0, 0);
+			} else if (modelType == Bunny)
+			{
+				// Textureの設定
+				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+
+				commandList->IASetVertexBuffers(0, 1, &bunnyVertexBufferView);
+
+				// 描画
+				commandList->DrawInstanced(UINT(bunnyData.vertices.size()), 1, 0, 0);
 			}
 
 			//-----------Modelの描画-----------//
