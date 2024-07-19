@@ -716,18 +716,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 
 	// WVP用のCBufferリソースを作る。----------------------------------------------//
-	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(device.Get(), sizeof(TransformationMatrix));
+	Microsoft::WRL::ComPtr<ID3D12Resource> modelWvpResource = CreateBufferResource(device.Get(), sizeof(TransformationMatrix));
 	//ID3D12Resource* wvpResource = CreateBufferResource(device.Get(), sizeof(TransformationMatrix));
 	// WVPにデータを書き込む
-	TransformationMatrix* TrasformationMatrixData = nullptr;
+	TransformationMatrix* modelTrasformationMatrixData = nullptr;
 	// アドレスを取得
-	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&TrasformationMatrixData));
+	modelWvpResource->Map(0, nullptr, reinterpret_cast<void**>(&modelTrasformationMatrixData));
 	// 単位行列を書き込んでいく
-	TrasformationMatrixData->WVP = MakeIdentityMatrix4x4();
-	TrasformationMatrixData->world = MakeIdentityMatrix4x4();
+	modelTrasformationMatrixData->WVP = MakeIdentityMatrix4x4();
+	modelTrasformationMatrixData->world = MakeIdentityMatrix4x4();
 
-	Transform transform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
+	Transform modelTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
 	Transform cameraTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -10.0f} };
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> sphereWvpResource = CreateBufferResource(device.Get(), sizeof(TransformationMatrix));
+
+	// WVPにデータを書き込む
+	TransformationMatrix* sphereTrasformationMatrixData = nullptr;
+	// アドレスを取得
+	sphereWvpResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereTrasformationMatrixData));
+
+	// 単位行列を書き込んでいく
+	sphereTrasformationMatrixData->WVP = MakeIdentityMatrix4x4();
+	sphereTrasformationMatrixData->world = MakeIdentityMatrix4x4();
+
+	Transform sphereTransform{ {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f} };
 
 	// Textureを読んで転送する---------------------------------------------------------------//
 	// 一枚目のTextureの読み込み
@@ -973,16 +986,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 			//ここに更新処理を書く
 
-			// 座標変換
-			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			// modelの座標変換
+			Matrix4x4 worldMatrix = MakeAffineMatrix(modelTransform.scale, modelTransform.rotate, modelTransform.translate);
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveMatrix(0.45f, static_cast<float>(kClientWidth) / static_cast<float>(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 wvpMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
-			// WVPにデータを書き込む
-			TrasformationMatrixData->WVP = wvpMatrix;
-			TrasformationMatrixData->world = worldMatrix;
+			// modelのWVPにデータを書き込む
+			modelTrasformationMatrixData->WVP = wvpMatrix;
+			modelTrasformationMatrixData->world = worldMatrix;
+
+			// Sphereの座標変換
+			Matrix4x4 worldMatrixSphere = MakeAffineMatrix(sphereTransform.scale, sphereTransform.rotate, sphereTransform.translate);
+			Matrix4x4 wvpMatrixSphere = Multiply(worldMatrixSphere, Multiply(viewMatrix, projectionMatrix));
+
+			sphereTrasformationMatrixData->WVP = wvpMatrixSphere;
+			sphereTrasformationMatrixData->world = worldMatrixSphere;
 
 			// modelのuvTransform
 			Matrix4x4 uvTransformMatrixModel = MakeAffineMatrix(uvTransformModel.scale, uvTransformModel.rotate, uvTransformModel.translate);
@@ -1042,9 +1062,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			{
 				if (ImGui::BeginTabItem("Model"))
 				{
-					ImGui::DragFloat3("Scale", &transform.scale.x, 0.1f, 0.0f, 50.0f);
-					ImGui::DragFloat3("Rotate", &transform.rotate.x, 0.1f, 0.0f, 6.28f);
-					ImGui::DragFloat3("Translate", &transform.translate.x, 0.1f, -50.0f, 50.0f);
+					ImGui::DragFloat3("Scale", &modelTransform.scale.x, 0.1f, 0.0f, 50.0f);
+					ImGui::DragFloat3("Rotate", &modelTransform.rotate.x, 0.1f, 0.0f, 6.28f);
+					ImGui::DragFloat3("Translate", &modelTransform.translate.x, 0.1f, -50.0f, 50.0f);
 					ImGui::ColorEdit4("Color", &materialData[0].color.x);
 
 					ImGui::Separator();
@@ -1056,18 +1076,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 					ImGui::EndTabItem();
 				}
-				if (ImGui::BeginTabItem("Model UVTransform"))
+				if (ImGui::BeginTabItem("Sphere"))
 				{
-					ImGui::DragFloat2("Scale", &uvTransformModel.scale.x, 0.01f, -10.0f, 10.0f);
-					ImGui::DragFloat2("Translate", &uvTransformModel.translate.x, 0.01f, -10.0f, 10.0f);
-					ImGui::SliderAngle("Rotate", &uvTransformModel.rotate.z);
+					ImGui::DragFloat3("Scale", &sphereTransform.scale.x, 0.1f, 0.0f, 50.0f);
+					ImGui::DragFloat3("Rotate", &sphereTransform.rotate.x, 0.1f, 0.0f, 6.28f);
+					ImGui::DragFloat3("Translate", &sphereTransform.translate.x, 0.1f, -50.0f, 50.0f);
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("Sprite"))
 				{
 					ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.1f, 0.0f, 50.0f);
 					ImGui::DragFloat3("Rotate", &transformSprite.rotate.x, 0.1f, 0.0f, 6.28f);
-					ImGui::DragFloat3("Translate", &transformSprite.translate.x, 0.1f, -50.0f, 50.0f);
+					ImGui::DragFloat3("Translate", &transformSprite.translate.x, 1.0f, -100.0f, 100.0f);
 					ImGui::ColorEdit4("Color", &materialDataSprite[0].color.x);
 					ImGui::EndTabItem();
 				}
@@ -1109,7 +1129,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress()); // マテリアルCBufferの場所を設定
 
 			// WVPのcBufferの設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
+			commandList->SetGraphicsRootConstantBufferView(1, modelWvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
 
 			// Textureの設定
 			commandList->SetGraphicsRootDescriptorTable(2, isMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
@@ -1127,12 +1147,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			//-----------Modelの描画-----------//
 
 			//-----------Sphereの描画-----------//
+			// WVPのcBufferの設定
+			commandList->SetGraphicsRootConstantBufferView(1, sphereWvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
+
 			commandList->IASetVertexBuffers(0, 1, &sphereVertexBufferView);
 
 			commandList->IASetIndexBuffer(&sphereIndexBufferView);
 
 			// 描画
-			commandList->DrawIndexedInstanced(sizeof(VertexData) * uniqueVertexCount, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(kVertexCount, 1, 0, 0, 0);
+			//-----------Sphereの描画-----------//
 
 
 			//-----------Spriteの描画-----------//
