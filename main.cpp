@@ -149,6 +149,8 @@ D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 
 D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
 
+std::vector<ModelData> LoadMutiMeshObjFile(const std::string& directoryPath, const std::string& fileName);
+
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& fileName);
 
 MaterialData LoadMtlFile(const std::string& directoryPath, const std::string& fileName);
@@ -551,11 +553,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	enum ModelType {
 		Plane,
 		Teapot,
-		Bunny
+		Bunny,
+		MultiMesh,
 	};
 
 	ModelType modelType = Plane;
-
 
 	// Planeのデータを読み込む------------------------------------------------------------
 	ModelData planeData = LoadObjFile("resources", "plane.obj");
@@ -610,6 +612,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	bunnyVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&bunnyVertexData));
 	memcpy(bunnyVertexData, bunnyData.vertices.data(), sizeof(VertexData)* bunnyData.vertices.size());
 
+
+	// Mutimeshのデータを読み込む---------------------------------------------------------
+	std::vector<ModelData> multiMeshModelDatas = LoadMutiMeshObjFile("resources", "multiMesh.obj");
+
+	std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> multiMeshVertexResources;
+	std::vector<D3D12_VERTEX_BUFFER_VIEW> multiMeshVertexBufferViews;
+
+	for (const auto& modelData : multiMeshModelDatas) {
+		Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = CreateBufferResource(device.Get(), sizeof(VertexData) * modelData.vertices.size());
+		D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+		vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
+		vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
+		vertexBufferView.StrideInBytes = sizeof(VertexData);
+
+		VertexData* vertexData = nullptr;
+		vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
+		memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
+
+		multiMeshVertexResources.push_back(vertexResource);
+		multiMeshVertexBufferViews.push_back(vertexBufferView);
+	}
+
+
+
+
 	// 球のリソースを作る----------------------------------------------------------------------------------------------
 	const int kVertexCount = 16 * 16 * 6;
 
@@ -647,6 +674,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	std::unordered_map<VertexData, uint32_t, VertexHash, VertexEqual> uniqueVertices;
 
 	uint32_t uniqueVertexCount = 0;
+
 	for (int latIndex = 0; latIndex < kSubdivision; latIndex++) {
 
 		float theta = -DirectX::XM_PIDIV2 + kLatEvery * latIndex;
@@ -709,7 +737,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		{0.0f, 0.0f, 0.0f},
 	};
 	//------------------------------------------------------Material------------------------------------------------------//
-
 
 	// WVP用のCBufferリソースを作る。----------------------------------------------//
 	Microsoft::WRL::ComPtr<ID3D12Resource> modelWvpResource = CreateBufferResource(device.Get(), sizeof(TransformationMatrix));
@@ -1093,7 +1120,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			{
 				if (ImGui::BeginTabItem("obj Model"))
 				{
-					const char* ModelType_items[] = { "Plane", "teapot", "bunny" };
+					const char* ModelType_items[] = { "Plane", "teapot", "bunny", "MultiMesh" };
 					static int ModelType_item_current = 0;
 					ImGui::Combo("ModelType", &ModelType_item_current, ModelType_items, IM_ARRAYSIZE(ModelType_items));
 					if (ImGui::Button("Load"))
@@ -1109,6 +1136,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 						else if (ModelType_item_current == 2)
 						{
 							modelType = Bunny;
+						} else if (ModelType_item_current == 3)
+						{
+							modelType = MultiMesh;
 						}
 					}
 
@@ -1221,6 +1251,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				// 描画
 				commandList->DrawInstanced(UINT(bunnyData.vertices.size()), 1, 0, 0);
+			} else if (modelType == MultiMesh)
+			{
+
+				//multiMeshModelDatas
+				//multiMeshVertexResources;
+				//multiMeshVertexBufferViews;
+
+				for (int i = 0; i < multiMeshModelDatas.size(); i++)
+				{
+					// Textureの設定
+					commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+
+					commandList->IASetVertexBuffers(0, 1, &multiMeshVertexBufferViews[i]);
+
+					// 描画
+					commandList->DrawInstanced(UINT(multiMeshModelDatas[i].vertices.size()), 1, 0, 0);
+				}
 			}
 
 			//-----------Modelの描画-----------//
@@ -1629,6 +1676,92 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 	return handle;
 }
 
+std::vector<ModelData> LoadMutiMeshObjFile(const std::string& directoryPath, const std::string& fileName)
+{
+	std::vector<ModelData> modelDatas;
+	ModelData modelData;
+	VertexData triangleVertices[3];
+	std::vector<Vector4> positions;
+	std::vector<Vector2> texcoords;
+	std::vector<Vector3> normals;
+	std::string line;
+
+	std::ifstream file(directoryPath + "/" + fileName);
+	assert(file.is_open());
+
+	while (std::getline(file, line))
+	{
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+		if (identifier == "v") {
+			Vector4 position;
+			s >> position.x >> position.y >> position.z;
+			position.w = 1.0f;
+			positions.push_back(position);
+
+		} else if (identifier == "vt") {
+			Vector2 texcoord;
+			s >> texcoord.x >> texcoord.y;
+			texcoords.push_back(texcoord);
+
+		} else if (identifier == "vn") {
+			Vector3 normal;
+			s >> normal.x >> normal.y >> normal.z;
+			normals.push_back(normal);
+
+		} else if (identifier == "f") {
+
+			for (int32_t facevertex = 0; facevertex < 3; facevertex++) {
+				std::string vertexDefinition;
+				s >> vertexDefinition;
+
+				std::istringstream v(vertexDefinition);
+				uint32_t elementIndices[3];
+
+				for (int32_t element = 0; element < 3; element++) {
+					std::string index;
+					std::getline(v, index, '/');
+					elementIndices[element] = std::stoi(index);
+				}
+
+				Vector4 position = positions[elementIndices[0] - 1];
+				Vector2 texcoord = texcoords[elementIndices[1] - 1];
+				Vector3 normal = normals[elementIndices[2] - 1];
+
+				position.z *= -1.0f;
+				normal.z *= -1.0f;
+				texcoord.y = 1.0f - texcoord.y;
+
+				triangleVertices[facevertex] = { position, texcoord, normal };
+
+			}
+
+			// Add the triangle vertices in reverse order
+			modelData.vertices.push_back(triangleVertices[2]);
+			modelData.vertices.push_back(triangleVertices[1]);
+			modelData.vertices.push_back(triangleVertices[0]);
+
+		} else if (identifier == "o" || identifier == "g") {
+			if (!modelData.vertices.empty()) {
+				modelDatas.push_back(modelData);
+				modelData = ModelData();
+			}
+		} else if (identifier == "mtllib") {
+			std::string mtlFileName;
+			s >> mtlFileName;
+			modelData.material = LoadMtlFile(directoryPath, mtlFileName);
+		}
+	}
+
+	if (!modelData.vertices.empty()) {
+		modelDatas.push_back(modelData);
+	}
+
+	return modelDatas;
+}
+
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& fileName)
 {
 	ModelData modelData;
@@ -1694,6 +1827,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& fileN
 			modelData.vertices.push_back(triangleVertices[2]);
 			modelData.vertices.push_back(triangleVertices[1]);
 			modelData.vertices.push_back(triangleVertices[0]);
+
 		} else if (identifier == "mtllib") {
 			std::string mtlFileName;
 			s >> mtlFileName;
