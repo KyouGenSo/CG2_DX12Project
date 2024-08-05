@@ -52,6 +52,12 @@ struct VertexData
 	Vector3 normal;
 };
 
+struct VertexDataNoTex
+{
+	Vector4 position;
+	Vector3 normal;
+};
+
 struct VertexHash {
 	size_t operator()(const VertexData& vertex) const {
 		size_t h1 = std::hash<float>{}(vertex.position.x);
@@ -105,6 +111,10 @@ struct MaterialData {
 struct ModelData {
 	std::vector<VertexData> vertices;
 	MaterialData material;
+};
+
+struct ModelDataNoTex {
+	std::vector<VertexDataNoTex> vertices;
 };
 
 struct D3DResourceLeakCheker
@@ -173,22 +183,23 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 [[nodiscard]]
 ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages, ID3D12Device* device, ID3D12GraphicsCommandList* commandList);
 
-
 ID3D12Resource* CreateDepthStencilResource(ID3D12Device* device, int32_t width, int32_t height);
 
 D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
 
 D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
 
-std::vector<ModelData> LoadMutiMeshObjFile(const std::string& directoryPath, const std::string& fileName);
-
-std::vector<ModelData> LoadMutiMaterialFile(const std::string& directoryPath, const std::string& fileName);
-
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& fileName);
 
 MaterialData LoadMtlFile(const std::string& directoryPath, const std::string& fileName);
 
+std::vector<ModelData> LoadMutiMeshObjFile(const std::string& directoryPath, const std::string& fileName);
+
+std::vector<ModelData> LoadMutiMaterialFile(const std::string& directoryPath, const std::string& fileName);
+
 std::unordered_map<std::string, MaterialData> LoadMutiMaterialMtlFile(const std::string& directoryPath, const std::string& fileName);
+
+ModelDataNoTex LoadObjFileNoTex(const std::string& directoryPath, const std::string& fileName);
 
 SoundData LoadWaveFile(const char* filename);
 
@@ -388,8 +399,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	// DescriptorHeapの生成
 	ComPtr<ID3D12DescriptorHeap> rtvDescriptorHeap = CreateDescriptorHeap(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
 	ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap = CreateDescriptorHeap(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
-	//ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescriptorHeap(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
-	//ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
 
 	// DescriptorSizeの取得
 	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -419,7 +428,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	//FenceとEventの生成
 	ComPtr<ID3D12Fence> fence = nullptr;
-	//ID3D12Fence* fence = nullptr;
 	uint64_t fenceValue = 0;
 	hr = device->CreateFence(fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
 	assert(SUCCEEDED(hr));
@@ -490,21 +498,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
 
 	ComPtr<ID3DBlob> signatureBlob = nullptr;
-	//ID3DBlob* signatureBlob = nullptr;
 	ComPtr<ID3DBlob> errorBlob = nullptr;
-	//ID3DBlob* errorBlob = nullptr;
+
 	hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
 	if (FAILED(hr))
 	{
 		Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
 		assert(false);
 	}
+
 	ComPtr<ID3D12RootSignature> rootSignature = nullptr;
-	//ID3D12RootSignature* rootSignature = nullptr;
 	hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(rootSignature.GetAddressOf()));
 	signatureBlob->GetBufferSize(), IID_PPV_ARGS(rootSignature.GetAddressOf());
 	assert(SUCCEEDED(hr));
-
 
 	// InputLayout
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
@@ -579,6 +585,116 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	hr = device->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&graphicsPipelineState));
 	assert(SUCCEEDED(hr));
 
+	// textureがない場合のPSOを生成---------------------------------------------------------
+	
+	// rootSignatureの生成
+	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignatureNoTex{};
+	descriptionRootSignatureNoTex.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+	// RootParameterの設定。複数設定できるので配列
+	D3D12_ROOT_PARAMETER rootParametersNoTex[3] = {};
+
+	// WVP行列.VertexShaderで使う
+	rootParametersNoTex[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビューを使う
+	rootParametersNoTex[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; // 頂点シェーダーで使う
+	rootParametersNoTex[0].Descriptor.ShaderRegister = 0; // レジスタ番号とバインド
+
+	// materialの設定.PixelShaderで使う
+	rootParametersNoTex[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビューを使う
+	rootParametersNoTex[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
+	rootParametersNoTex[1].Descriptor.ShaderRegister = 0; // レジスタ番号とバインド
+
+	// DirectionalLightの設定.PixelShaderで使う
+	rootParametersNoTex[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; // 定数バッファビューを使う
+	rootParametersNoTex[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // ピクセルシェーダーで使う
+	rootParametersNoTex[2].Descriptor.ShaderRegister = 1; // レジスタ番号とバインド
+
+	descriptionRootSignatureNoTex.pParameters = rootParametersNoTex;
+	descriptionRootSignatureNoTex.NumParameters = _countof(rootParametersNoTex);
+
+	ComPtr<ID3DBlob> signatureBlobNoTex = nullptr;
+	ComPtr<ID3DBlob> errorBlobNoTex = nullptr;
+
+	hr = D3D12SerializeRootSignature(&descriptionRootSignatureNoTex, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlobNoTex, &errorBlobNoTex);
+	if (FAILED(hr))
+	{
+		Log(reinterpret_cast<char*>(errorBlobNoTex->GetBufferPointer()));
+		assert(false);
+	}
+
+	ComPtr<ID3D12RootSignature> rootSignatureNoTex = nullptr;
+	hr = device->CreateRootSignature(0, signatureBlobNoTex->GetBufferPointer(), signatureBlobNoTex->GetBufferSize(), IID_PPV_ARGS(rootSignatureNoTex.GetAddressOf()));
+	signatureBlobNoTex->GetBufferSize(), IID_PPV_ARGS(rootSignatureNoTex.GetAddressOf());
+	assert(SUCCEEDED(hr));
+
+	// InputLayout
+	D3D12_INPUT_ELEMENT_DESC inputElementDescsNoTex[2] = {};
+	inputElementDescsNoTex[0].SemanticName = "POSITION";
+	inputElementDescsNoTex[0].SemanticIndex = 0;
+	inputElementDescsNoTex[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	inputElementDescsNoTex[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+
+	inputElementDescsNoTex[1].SemanticName = "NORMAL";
+	inputElementDescsNoTex[1].SemanticIndex = 0;
+	inputElementDescsNoTex[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+	inputElementDescsNoTex[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+
+	D3D12_INPUT_LAYOUT_DESC inputLayoutDescNoTex{};
+	inputLayoutDescNoTex.pInputElementDescs = inputElementDescsNoTex;
+	inputLayoutDescNoTex.NumElements = _countof(inputElementDescsNoTex);
+
+	// BlendState
+	D3D12_BLEND_DESC blendDescNoTex{};
+	blendDescNoTex.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+	// RasterizerState
+	D3D12_RASTERIZER_DESC rasterizerDescNoTex{};
+	// 三角形の中を塗りつぶす
+	rasterizerDescNoTex.FillMode = D3D12_FILL_MODE_SOLID;
+	// 裏面を表示しない
+	rasterizerDescNoTex.CullMode = D3D12_CULL_MODE_BACK;
+
+	// shaderのコンパイル
+	IDxcBlob* vertexShaderNoTexBlob = CompileShader(L"NoTex.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
+	assert(vertexShaderNoTexBlob != nullptr);
+
+	IDxcBlob* pixelShaderNoTexBlob = CompileShader(L"NoTex.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
+	assert(pixelShaderNoTexBlob != nullptr);
+
+	// DepthStencilState
+	D3D12_DEPTH_STENCIL_DESC depthStencilDescNoTex{};
+	// depthの機能を有効化にする
+	depthStencilDescNoTex.DepthEnable = true;
+	// 書き込みします
+	depthStencilDescNoTex.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	// 深度の比較方法
+	depthStencilDescNoTex.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+	// PSOの生成
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC graphicsPipelineStateNoTexDesc{};
+	graphicsPipelineStateNoTexDesc.pRootSignature = rootSignatureNoTex.Get();
+	graphicsPipelineStateNoTexDesc.InputLayout = inputLayoutDescNoTex;
+	graphicsPipelineStateNoTexDesc.VS = { vertexShaderNoTexBlob->GetBufferPointer(), vertexShaderNoTexBlob->GetBufferSize() };
+	graphicsPipelineStateNoTexDesc.PS = { pixelShaderNoTexBlob->GetBufferPointer(), pixelShaderNoTexBlob->GetBufferSize() };
+	graphicsPipelineStateNoTexDesc.BlendState = blendDescNoTex;
+	graphicsPipelineStateNoTexDesc.RasterizerState = rasterizerDescNoTex;
+	// 書き込むRTVの情報
+	graphicsPipelineStateNoTexDesc.NumRenderTargets = 1;
+	graphicsPipelineStateNoTexDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	// 利用するトポロジ（形状）のタイプ。三角形
+	graphicsPipelineStateNoTexDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	// どのように画面に色を打ち込むかの設定
+	graphicsPipelineStateNoTexDesc.SampleDesc.Count = 1;
+	graphicsPipelineStateNoTexDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+	// DepthStencilの設定
+	graphicsPipelineStateNoTexDesc.DepthStencilState = depthStencilDescNoTex;
+	graphicsPipelineStateNoTexDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+	// 実際に生成
+	ComPtr<ID3D12PipelineState> graphicsPipelineStateNoTex = nullptr;
+	hr = device->CreateGraphicsPipelineState(&graphicsPipelineStateNoTexDesc, IID_PPV_ARGS(&graphicsPipelineStateNoTex));
+	assert(SUCCEEDED(hr));
+
 	//-----------------------------------------PSO-----------------------------------------///
 
 
@@ -595,6 +711,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		Bunny,
 		MultiMesh,
 		MultiMaterial,
+		Suzanne,
 	};
 
 	ModelType modelType = Plane;
@@ -694,6 +811,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		multiMaterialVertexResources.push_back(vertexResource);
 		multiMaterialVertexBufferViews.push_back(vertexBufferView);
 	}
+
+	// Suzanneのデータを読み込む---------------------------------------------------------
+	ModelDataNoTex suzanneData = LoadObjFileNoTex("resources", "suzanne.obj");
+
+	// 頂点リソースを作る
+	ComPtr<ID3D12Resource> suzanneVertexResource = CreateBufferResource(device.Get(), sizeof(VertexDataNoTex) * suzanneData.vertices.size());
+
+	// 頂点バッファビューを作る
+	D3D12_VERTEX_BUFFER_VIEW suzanneVertexBufferView{};
+	suzanneVertexBufferView.BufferLocation = suzanneVertexResource->GetGPUVirtualAddress();
+	suzanneVertexBufferView.SizeInBytes = UINT(sizeof(VertexDataNoTex) * suzanneData.vertices.size());
+	suzanneVertexBufferView.StrideInBytes = sizeof(VertexDataNoTex);
+
+	// 頂点リソースにデータを書き込む
+	VertexDataNoTex* suzanneVertexData = nullptr;
+	suzanneVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&suzanneVertexData));
+	memcpy(suzanneVertexData, suzanneData.vertices.data(), sizeof(VertexDataNoTex) * suzanneData.vertices.size());
 
 	// 球のリソースを作る----------------------------------------------------------------------------------------------
 	const int kVertexCount = 16 * 16 * 6;
@@ -1197,16 +1331,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 			commandList->OMSetRenderTargets(1, &rtvHandle[backBufferIndex], false, &dsvHandle);
 
-			// クリアカラー
-			float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
-
-			// 画面をクリア
-			commandList->ClearRenderTargetView(rtvHandle[backBufferIndex], clearColor, 0, nullptr);
-			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-			commandList->RSSetViewports(1, &viewPort);
-			commandList->RSSetScissorRects(1, &scissorRect);
-
 			//-------------------ImGui-------------------//
 			ImGui::Begin("Option");
 
@@ -1214,7 +1338,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			{
 				if (ImGui::BeginTabItem("obj Model"))
 				{
-					const char* ModelType_items[] = { "Plane", "teapot", "bunny", "MultiMesh", "MultiMaterial" };
+					const char* ModelType_items[] = { "Plane", "teapot", "bunny", "MultiMesh", "MultiMaterial", "Suzanne" };
 					static int ModelType_item_current = 0;
 					ImGui::Combo("ModelType", &ModelType_item_current, ModelType_items, IM_ARRAYSIZE(ModelType_items));
 					if (ImGui::Button("Load"))
@@ -1234,6 +1358,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 						} else if (ModelType_item_current == 4)
 						{
 							modelType = MultiMaterial;
+						} else if (ModelType_item_current == 5)
+						{
+							modelType = Suzanne;
 						}
 					}
 
@@ -1308,14 +1435,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			}
 			ImGui::End();
 
+			// ImGuiの内部コマンドを生成。描画処理の前に行う
+			ImGui::Render();
+
 			//-------------------ImGui-------------------//
 
 			/// <summary>
 			/// 描画処理
 			/// </summary>
 			
-			// ImGuiの内部コマンドを生成。描画処理の前に行う
-			ImGui::Render();
+			// クリアカラー
+			float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
+
+			// 画面をクリア
+			commandList->ClearRenderTargetView(rtvHandle[backBufferIndex], clearColor, 0, nullptr);
+			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+			commandList->RSSetViewports(1, &viewPort);
+			commandList->RSSetScissorRects(1, &scissorRect);
 
 			commandList->SetGraphicsRootSignature(rootSignature.Get()); // ルートシグネチャの設定
 			commandList->SetPipelineState(graphicsPipelineState.Get()); // パイプラインステートの設定
@@ -1415,6 +1552,32 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			commandList->IASetIndexBuffer(&indexBufferViewSprite); // インデックスバッファの設定
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0); // 描画
 			//-----------Spriteの描画-----------//
+
+			//-----------Suzanneの描画-----------//
+			if (modelType == Suzanne)
+			{
+				// ルートシグネチャの設定
+				commandList->SetGraphicsRootSignature(rootSignatureNoTex.Get());
+
+				// psoの設定
+				commandList->SetPipelineState(graphicsPipelineStateNoTex.Get());
+
+				// マテリアルの設定。色を変える
+				commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress()); // マテリアルCBufferの場所を設定
+
+				// WVPのcBufferの設定
+				commandList->SetGraphicsRootConstantBufferView(0, modelWvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
+
+				// Lightの設定
+				commandList->SetGraphicsRootConstantBufferView(2, lightResource->GetGPUVirtualAddress());
+
+				// 頂点バッファの設定
+				commandList->IASetVertexBuffers(0, 1, &suzanneVertexBufferView);
+
+				// 描画
+				commandList->DrawInstanced(UINT(suzanneData.vertices.size()), 1, 0, 0);
+			}
+			//-----------Suzanneの描画-----------//
 
 
 			// commandListにimguiの描画コマンドを積む。描画処理の後、RTVからPRESENT Stateに戻す前に行う
@@ -1751,6 +1914,106 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 	return handle;
 }
 
+ModelData LoadObjFile(const std::string& directoryPath, const std::string& fileName)
+{
+	ModelData modelData;
+	VertexData triangleVertices[3];
+	std::vector<Vector4> positions;
+	std::vector<Vector2> texcoords;
+	std::vector<Vector3> normals;
+	std::string line;
+
+	std::ifstream file(directoryPath + "/" + fileName);
+	assert(file.is_open());
+
+	while (std::getline(file, line))
+	{
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+		if (identifier == "v") {
+			Vector4 position;
+			s >> position.x >> position.y >> position.z;
+			position.w = 1.0f;
+			positions.push_back(position);
+
+		} else if (identifier == "vt") {
+			Vector2 texcoord;
+			s >> texcoord.x >> texcoord.y;
+			texcoords.push_back(texcoord);
+
+		} else if (identifier == "vn") {
+			Vector3 normal;
+			s >> normal.x >> normal.y >> normal.z;
+			normals.push_back(normal);
+
+		} else if (identifier == "f") {
+
+			for (int32_t facevertex = 0; facevertex < 3; facevertex++) {
+				std::string vertexDefiniton;
+				s >> vertexDefiniton;
+
+				std::istringstream v(vertexDefiniton);
+				uint32_t elementIndices[3];
+
+				for (int32_t element = 0; element < 3; element++) {
+					std::string index;
+					std::getline(v, index, '/');
+					elementIndices[element] = std::stoi(index);
+				}
+
+				Vector4 position = positions[elementIndices[0] - 1];
+				Vector2 texcoord = texcoords[elementIndices[1] - 1];
+				Vector3 normal = normals[elementIndices[2] - 1];
+
+				position.z *= -1.0f;
+				normal.z *= -1.0f;
+				texcoord.y = 1.0f - texcoord.y;
+
+				triangleVertices[facevertex] = { position, texcoord, normal };
+
+			}
+
+			// 三角形の頂点データを追加
+			modelData.vertices.push_back(triangleVertices[2]);
+			modelData.vertices.push_back(triangleVertices[1]);
+			modelData.vertices.push_back(triangleVertices[0]);
+
+		} else if (identifier == "mtllib") {
+			std::string mtlFileName;
+			s >> mtlFileName;
+			modelData.material = LoadMtlFile(directoryPath, mtlFileName);
+		}
+	}
+
+	return modelData;
+}
+
+MaterialData LoadMtlFile(const std::string& directoryPath, const std::string& fileName)
+{
+	MaterialData materialData;
+	std::string line;
+
+	std::ifstream file(directoryPath + "/" + fileName);
+	assert(file.is_open());
+
+	while (std::getline(file, line))
+	{
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+		if (identifier == "map_Kd") {
+			std::string textureFileName;
+			s >> textureFileName;
+			materialData.texturePath = directoryPath + "/" + textureFileName;
+		}
+	}
+
+	return materialData;
+}
+
 std::vector<ModelData> LoadMutiMeshObjFile(const std::string& directoryPath, const std::string& fileName)
 {
 	std::vector<ModelData> modelDatas;
@@ -1930,106 +2193,6 @@ std::vector<ModelData> LoadMutiMaterialFile(const std::string& directoryPath, co
 	return modelDatas;
 }
 
-ModelData LoadObjFile(const std::string& directoryPath, const std::string& fileName)
-{
-	ModelData modelData;
-	VertexData triangleVertices[3];
-	std::vector<Vector4> positions;
-	std::vector<Vector2> texcoords;
-	std::vector<Vector3> normals;
-	std::string line;
-
-	std::ifstream file(directoryPath + "/" + fileName);
-	assert(file.is_open());
-
-	while (std::getline(file, line))
-	{
-		std::string identifier;
-		std::istringstream s(line);
-		s >> identifier;
-
-		if (identifier == "v") {
-			Vector4 position;
-			s >> position.x >> position.y >> position.z;
-			position.w = 1.0f;
-			positions.push_back(position);
-
-		} else if (identifier == "vt") {
-			Vector2 texcoord;
-			s >> texcoord.x >> texcoord.y;
-			texcoords.push_back(texcoord);
-
-		} else if (identifier == "vn") {
-			Vector3 normal;
-			s >> normal.x >> normal.y >> normal.z;
-			normals.push_back(normal);
-
-		} else if (identifier == "f") {
-
-			for (int32_t facevertex = 0; facevertex < 3; facevertex++) {
-				std::string vertexDefiniton;
-				s >> vertexDefiniton;
-
-				std::istringstream v(vertexDefiniton);
-				uint32_t elementIndices[3];
-
-				for (int32_t element = 0; element < 3; element++) {
-					std::string index;
-					std::getline(v, index, '/');
-					elementIndices[element] = std::stoi(index);
-				}
-
-				Vector4 position = positions[elementIndices[0] - 1];
-				Vector2 texcoord = texcoords[elementIndices[1] - 1];
-				Vector3 normal = normals[elementIndices[2] - 1];
-
-				position.z *= -1.0f;
-				normal.z *= -1.0f;
-				texcoord.y = 1.0f - texcoord.y;
-
-				triangleVertices[facevertex] = { position, texcoord, normal };
-
-			}
-
-			// 三角形の頂点データを追加
-			modelData.vertices.push_back(triangleVertices[2]);
-			modelData.vertices.push_back(triangleVertices[1]);
-			modelData.vertices.push_back(triangleVertices[0]);
-
-		} else if (identifier == "mtllib") {
-			std::string mtlFileName;
-			s >> mtlFileName;
-			modelData.material = LoadMtlFile(directoryPath, mtlFileName);
-		}
-	}
-
-	return modelData;
-}
-
-MaterialData LoadMtlFile(const std::string& directoryPath, const std::string& fileName)
-{
-	MaterialData materialData;
-	std::string line;
-
-	std::ifstream file(directoryPath + "/" + fileName);
-	assert(file.is_open());
-
-	while (std::getline(file, line))
-	{
-		std::string identifier;
-		std::istringstream s(line);
-		s >> identifier;
-
-		if (identifier == "map_Kd") {
-			std::string textureFileName;
-			s >> textureFileName;
-			materialData.texturePath = directoryPath + "/" + textureFileName;
-		}
-	}
-
-	return materialData;
-}
-
 std::unordered_map<std::string, MaterialData> LoadMutiMaterialMtlFile(const std::string& directoryPath, const std::string& fileName)
 {
 	std::unordered_map<std::string, MaterialData> materials;
@@ -2056,6 +2219,67 @@ std::unordered_map<std::string, MaterialData> LoadMutiMaterialMtlFile(const std:
 
 	return materials;
 }
+
+ModelDataNoTex LoadObjFileNoTex(const std::string& directoryPath, const std::string& fileName) {
+	ModelDataNoTex modelData;
+	VertexDataNoTex triangleVertices[3];
+	std::vector<Vector4> positions;
+	std::vector<Vector3> normals;
+	std::string line;
+
+	std::ifstream file(directoryPath + "/" + fileName);
+	assert(file.is_open());
+
+	while (std::getline(file, line)) {
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+		if (identifier == "v") {
+			Vector4 position;
+			s >> position.x >> position.y >> position.z;
+			position.w = 1.0f;
+			positions.push_back(position);
+
+		} else if (identifier == "vn") {
+			Vector3 normal;
+			s >> normal.x >> normal.y >> normal.z;
+			normals.push_back(normal);
+
+		} else if (identifier == "f") {
+
+			for (int32_t facevertex = 0; facevertex < 3; facevertex++) {
+				std::string vertexDefinition;
+				s >> vertexDefinition;
+
+				// 使用两个斜杠分割字符串
+				size_t firstSlash = vertexDefinition.find("//");
+				size_t secondSlash = vertexDefinition.find("//", firstSlash + 2);
+
+				// 提取顶点位置和法线索引
+				uint32_t positionIndex = std::stoi(vertexDefinition.substr(0, firstSlash));
+				uint32_t normalIndex = std::stoi(vertexDefinition.substr(firstSlash + 2, secondSlash - (firstSlash + 2)));
+
+				Vector4 position = positions[positionIndex - 1];
+				Vector3 normal = normals[normalIndex - 1];
+
+				// 处理坐标系转换
+				position.z *= -1.0f;
+				normal.z *= -1.0f;
+
+				triangleVertices[facevertex] = { position, normal };
+			}
+
+			// 添加三角形顶点数据
+			modelData.vertices.push_back(triangleVertices[2]);
+			modelData.vertices.push_back(triangleVertices[1]);
+			modelData.vertices.push_back(triangleVertices[0]);
+		}
+	}
+
+	return modelData;
+}
+
 
 SoundData LoadWaveFile(const char* filename)
 {
