@@ -1559,7 +1559,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				// ルートシグネチャの設定
 				commandList->SetGraphicsRootSignature(rootSignatureNoTex.Get());
 
-				// psoの設定
+				// PSOの設定
 				commandList->SetPipelineState(graphicsPipelineStateNoTex.Get());
 
 				// マテリアルの設定。色を変える
@@ -1569,7 +1569,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				commandList->SetGraphicsRootConstantBufferView(0, modelWvpResource->GetGPUVirtualAddress()); // WVPのCBufferの場所を設定
 
 				// Lightの設定
-				commandList->SetGraphicsRootConstantBufferView(2, lightResource->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootConstantBufferView(2, lightResource->GetGPUVirtualAddress()); // LightのCBufferの場所を設定
 
 				// 頂点バッファの設定
 				commandList->IASetVertexBuffers(0, 1, &suzanneVertexBufferView);
