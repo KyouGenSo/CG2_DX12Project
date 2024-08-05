@@ -2252,25 +2252,25 @@ ModelDataNoTex LoadObjFileNoTex(const std::string& directoryPath, const std::str
 				std::string vertexDefinition;
 				s >> vertexDefinition;
 
-				// 使用两个斜杠分割字符串
+				// 文字列を二つのスラッシュ "//" で分割する
 				size_t firstSlash = vertexDefinition.find("//");
 				size_t secondSlash = vertexDefinition.find("//", firstSlash + 2);
 
-				// 提取顶点位置和法线索引
+				// 頂点位置と法線のインデックスを抽出する
 				uint32_t positionIndex = std::stoi(vertexDefinition.substr(0, firstSlash));
 				uint32_t normalIndex = std::stoi(vertexDefinition.substr(firstSlash + 2, secondSlash - (firstSlash + 2)));
 
 				Vector4 position = positions[positionIndex - 1];
 				Vector3 normal = normals[normalIndex - 1];
 
-				// 处理坐标系转换
+				// 座標系変換を処理する
 				position.z *= -1.0f;
 				normal.z *= -1.0f;
 
 				triangleVertices[facevertex] = { position, normal };
 			}
 
-			// 添加三角形顶点数据
+			// 三角形の頂点データを追加する
 			modelData.vertices.push_back(triangleVertices[2]);
 			modelData.vertices.push_back(triangleVertices[1]);
 			modelData.vertices.push_back(triangleVertices[0]);
