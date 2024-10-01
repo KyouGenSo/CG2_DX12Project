@@ -31,11 +31,6 @@ PixelShaderOutput main(VertexShaderOutput input)
     float4 transformedUV = mul(float4(input.texcoord, 0, 1), gMaterial.uvTransform);
     float32_t4 texColor = gTexture.Sample(gSampler, transformedUV.xy);
     
-    if (texColor.a <= 0.5f)
-    {
-        discard;
-    }
-    
     if (texColor.a == 0.0f)
     {
         discard;
@@ -57,8 +52,6 @@ PixelShaderOutput main(VertexShaderOutput input)
     {
         output.color = texColor * gMaterial.color;
     }
-    
-
     
     return output;
 }
